@@ -28,7 +28,7 @@ st.set_page_config(
     page_title="Custos — Your Financial Guardian",
     page_icon="🛡️",
     layout="wide",
-    initial_sidebar_state="expanded", menu_items={}
+    initial_sidebar_state="expanded"
 )
 
 # ─── CUSTOM CSS ─────────────────────────────────────────────────────────────────
@@ -232,6 +232,23 @@ header {visibility: hidden;}
 .stSuccess { background: rgba(40,167,69,0.1); border-radius: 8px; }
 .stError { background: rgba(220,53,69,0.1); border-radius: 8px; }
 .stWarning { background: rgba(255,193,7,0.1); border-radius: 8px; }
+
+/* FORCE SIDEBAR ALWAYS VISIBLE */
+[data-testid="stSidebar"] {
+    display: block !important;
+    visibility: visible !important;
+    width: 280px !important;
+    min-width: 280px !important;
+    transform: none !important;
+    position: relative !important;
+}
+[data-testid="collapsedControl"] {
+    display: none !important;
+    visibility: hidden !important;
+}
+section[data-testid="stSidebar"] > div {
+    width: 280px !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -752,11 +769,3 @@ elif page == "🎯 Goals & Budget":
                         st.markdown(f'<div class="alert-danger">⚠️ <strong>{row["category"]}</strong>: Over budget by ₹{overspend:,.0f}</div>', unsafe_allow_html=True)
             else:
                 st.info("Set budgets and add expenses to see budget vs actual comparison.")
-
-# Sidebar always expanded CSS fix
-st.markdown("""
-<style>
-[data-testid="collapsedControl"] { display: none !important; }
-[data-testid="stSidebar"] { min-width: 280px !important; }
-</style>
-""", unsafe_allow_html=True)
