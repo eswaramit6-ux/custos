@@ -77,7 +77,7 @@ SPENDING_INSIGHTS = {
 def get_personalized_advice(expenses_summary, total_income, api_key, guru="Warren Buffett"):
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash')
 
         guru_data = FINANCIAL_GURUS.get(guru, FINANCIAL_GURUS["Warren Buffett"])
 

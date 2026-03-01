@@ -26,7 +26,7 @@ def configure_gemini(api_key):
 def extract_expense_from_image(image, api_key):
     try:
         configure_gemini(api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash')
 
         prompt = f"""You are an expert at reading Indian payment screenshots (UPI, PhonePe, Google Pay, Paytm, bank receipts).
 
@@ -77,7 +77,7 @@ def parse_extraction_response(response_text):
 def categorize_text_expense(description, amount, api_key):
     try:
         configure_gemini(api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash')
         response = model.generate_content(
             f"Categorize this expense into ONE category.\nDescription: {description}\nAmount: {amount}\nCategories: {', '.join(CATEGORIES)}\nReply with ONLY the category name."
         )
