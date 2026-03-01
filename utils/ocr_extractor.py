@@ -65,11 +65,13 @@ def extract_from_text(text):
 
     # ── Amount Detection ──
     amount_patterns = [
-        r'(?:rs\.?|inr|₹)\s*([0-9,]+(?:\.[0-9]{2})?)',
-        r'([0-9,]+(?:\.[0-9]{2})?)\s*(?:rs\.?|inr|₹)',
-        r'(?:amount|amt|paid|debited|credited|total)\s*:?\s*(?:rs\.?|inr|₹)?\s*([0-9,]+(?:\.[0-9]{2})?)',
-        r'(?:for|of)\s+(?:rs\.?|inr|₹)\s*([0-9,]+(?:\.[0-9]{2})?)',
-        r'(?:debit|credit)\s+(?:of\s+)?(?:rs\.?|₹)?\s*([0-9,]+(?:\.[0-9]{2})?)',
+        r'[₹₹]\s*([0-9,]+(?:\.[0-9]{2})?)',
+        r'(?:rs\.?|inr)\s*([0-9,]+(?:\.[0-9]{2})?)',
+        r'([0-9,]+(?:\.[0-9]{2})?)\s*(?:rs\.?|inr)',
+        r'(?:amount|amt|paid|debited|credited|total)\s*:?\s*[₹₹]?\s*([0-9,]+(?:\.[0-9]{2})?)',
+        r'(?:for|of)\s+[₹₹]\s*([0-9,]+(?:\.[0-9]{2})?)',
+        r'(?:debit|credit)\s+(?:of\s+)?[₹₹]?\s*([0-9,]+(?:\.[0-9]{2})?)',
+        r'([0-9]{2,6}(?:\.[0-9]{2})?)',
     ]
 
     for pattern in amount_patterns:
