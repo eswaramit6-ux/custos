@@ -18,8 +18,9 @@ from utils.ocr_extractor import (
     parse_csv_bank_statement, CATEGORIES
 )
 from utils.financial_advisor import (
-    get_personalized_advice, analyze_spending_health,
-    get_savings_rate_advice, FINANCIAL_GURUS, INDIAN_FINANCIAL_ADVICE
+    generate_rule_based_advice, analyze_spending_health,
+    get_savings_rate_advice, calculate_financial_health_score,
+    FINANCIAL_GURUS, INDIAN_FINANCIAL_ADVICE
 )
 
 # ─── PAGE CONFIG ────────────────────────────────────────────────────────────────
@@ -251,10 +252,10 @@ with st.sidebar:
     # API Key
     st.markdown("#### 🔑 API Configuration")
     api_key = st.text_input(
-        "Anthropic API Key",
+        "Gemini API Key",
         type="password",
-        placeholder="sk-ant-...",
-        help="Your Claude API key for AI-powered features"
+        placeholder="AIza...",
+        help="Your Gemini API key for AI-powered features"
     )
     if api_key:
         st.session_state['api_key'] = api_key
@@ -587,73 +588,86 @@ elif page == "📊 Analytics":
 elif page == "🤖 AI Advisor":
     st.markdown('<div class="section-header">AI FINANCIAL ADVISOR</div>', unsafe_allow_html=True)
 
-    api_key = st.session_state.get('api_key', '')
-    if not api_key:
-        st.error("🔑 Please add your Anthropic API key in the sidebar to use the AI Advisor!")
-    else:
-        col1, col2 = st.columns([1, 2])
+    col1, col2 = st.columns([1, 2])
 
-        with col1:
-            st.markdown("**Choose Your Financial Guru**")
-            guru = st.selectbox(
-                "",
-                list(FINANCIAL_GURUS.keys()),
-                label_visibility="collapsed"
-            )
-            guru_data = FINANCIAL_GURUS[guru]
+    with col1:
+        st.markdown("**Choose Your Financial Guru**")
+        guru = st.selectbox("", list(FINANCIAL_GURUS.keys()), label_visibility="collapsed")
+        guru_data = FINANCIAL_GURUS[guru]
+        st.markdown(f"""
+        <div class="advice-card" style="margin-top:0.5rem">
+            <div style="color:#c4a050; font-family: Cinzel, serif; font-size:1.1rem; margin-bottom:0.5rem">{guru_data['icon']} {guru}</div>
+            <div style="font-size:0.85rem; color:rgba(232,224,208,0.7); font-style:italic">{guru_data['philosophy']}</div>
+            <hr style="border-color:rgba(196,160,80,0.2); margin:0.8rem 0">
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("**Key Principles**")
+        for principle in guru_data['principles'][:3]:
+            st.markdown(f'<div class="alert-info" style="font-size:0.82rem; margin:0.3rem 0">💬 {principle}</div>', unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("**Indian Investment Guide**")
+        for product, desc in INDIAN_FINANCIAL_ADVICE['Investment Options'].items():
+            with st.expander(f"📈 {product}"):
+                st.markdown(f"<small>{desc}</small>", unsafe_allow_html=True)
+
+    with col2:
+        now = datetime.now()
+        income = st.session_state.get('monthly_income', 0)
+        cat_totals = get_category_totals(now.year, now.month)
+
+        if cat_totals.empty:
+            st.markdown("""
+            <div class="advice-card" style="text-align:center; padding:2rem">
+                <div style="font-size:2rem">📊</div>
+                <div style="color:#c4a050; margin-top:0.5rem">No expenses yet!</div>
+                <div style="font-size:0.85rem; color:rgba(232,224,208,0.6); margin-top:0.5rem">
+                    Add some expenses first to get personalized financial advice
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            # Financial Health Score
+            score, grade, reasons = calculate_financial_health_score(cat_totals, income)
+            score_color = "#4ade80" if score >= 80 else "#facc15" if score >= 60 else "#f87171"
             st.markdown(f"""
-            <div class="advice-card" style="margin-top:0.5rem">
-                <div style="color:#c4a050; font-family: Cinzel, serif; font-size:1rem; margin-bottom:0.5rem">{guru}</div>
-                <div style="font-size:0.85rem; color:rgba(232,224,208,0.7); font-style:italic">{guru_data['philosophy']}</div>
+            <div class="metric-card" style="margin-bottom:1rem">
+                <div style="display:flex; justify-content:space-between; align-items:center">
+                    <div>
+                        <div style="font-size:0.8rem; color:rgba(232,224,208,0.5); letter-spacing:2px; text-transform:uppercase">Financial Health Score</div>
+                        <div style="font-family:Cinzel,serif; font-size:2rem; color:{score_color}">{score}/100</div>
+                        <div style="font-size:0.9rem; color:{score_color}">{grade}</div>
+                    </div>
+                    <div style="font-size:3rem">{guru_data['icon']}</div>
+                </div>
             </div>
             """, unsafe_allow_html=True)
 
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown("**Indian Investment Guide**")
-            for product, desc in INDIAN_FINANCIAL_ADVICE['Investment Options'].items():
-                with st.expander(f"📈 {product}"):
-                    st.markdown(f"<small>{desc}</small>", unsafe_allow_html=True)
+            # Spending alerts
+            alerts, suggestions = analyze_spending_health(cat_totals, income)
+            if alerts:
+                st.markdown("**⚠️ Spending Alerts**")
+                for alert in alerts:
+                    st.markdown(f'<div class="alert-danger">{alert}</div>', unsafe_allow_html=True)
 
-        with col2:
-            now = datetime.now()
-            income = st.session_state.get('monthly_income', 0)
-            cat_totals = get_category_totals(now.year, now.month)
-
-            if cat_totals.empty:
-                st.info("Add some expenses first to get personalized advice!")
-            else:
-                # Spending alerts
-                alerts, suggestions = analyze_spending_health(cat_totals, income)
-                if alerts:
-                    st.markdown("**⚠️ Spending Alerts**")
-                    for alert in alerts:
-                        st.markdown(f'<div class="alert-danger">{alert}</div>', unsafe_allow_html=True)
-
-                # Build summary for Claude
-                summary_lines = []
-                for _, row in cat_totals.iterrows():
-                    pct = (row['total'] / income * 100) if income > 0 else 0
-                    summary_lines.append(f"- {row['category']}: ₹{row['total']:,.0f} ({pct:.1f}% of income)")
-                expenses_summary = "\n".join(summary_lines)
-
-                if st.button("🤖 Generate Personalized Advice", use_container_width=True):
-                    with st.spinner(f"Consulting {guru}'s wisdom..."):
-                        advice = get_personalized_advice(expenses_summary, income, api_key, guru)
-
-                    st.markdown(f"""
-                    <div class="advice-card">
-                        <div style="color:#c4a050; font-family:Cinzel,serif; font-size:0.9rem; 
-                                    letter-spacing:2px; margin-bottom:1rem">
-                            ADVICE FROM {guru.upper()}
-                        </div>
-                        {advice}
+            if st.button(f"{guru_data['icon']} Generate Advice from {guru}", use_container_width=True):
+                with st.spinner(f"Analysing your finances through {guru}'s lens..."):
+                    advice = generate_rule_based_advice(cat_totals, income, guru)
+                st.markdown(f"""
+                <div class="advice-card">
+                    <div style="color:#c4a050; font-family:Cinzel,serif; font-size:0.9rem;
+                                letter-spacing:2px; margin-bottom:1rem">
+                        {guru_data['icon']} ADVICE FROM {guru.upper()}
                     </div>
-                    """, unsafe_allow_html=True)
+                </div>
+                """, unsafe_allow_html=True)
+                st.markdown(advice)
 
-                # Tax saving section
-                st.markdown('<div class="section-header" style="margin-top:1.5rem">TAX SAVING TIPS</div>', unsafe_allow_html=True)
-                for section, details in INDIAN_FINANCIAL_ADVICE['Tax Saving'].items():
-                    st.markdown(f'<div class="alert-info"><strong>{section}:</strong> {details}</div>', unsafe_allow_html=True)
+            # Tax saving section
+            st.markdown('<div class="section-header" style="margin-top:1.5rem">TAX SAVING TIPS</div>', unsafe_allow_html=True)
+            for section, details in INDIAN_FINANCIAL_ADVICE['Tax Saving'].items():
+                st.markdown(f'<div class="alert-info"><strong>{section}:</strong> {details}</div>', unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE: GOALS & BUDGET
