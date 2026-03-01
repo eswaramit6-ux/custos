@@ -369,9 +369,7 @@ if page == "🏠 Dashboard":
         if not cat_totals.empty:
             fig = px.pie(
                 cat_totals, values='total', names='category',
-                color_discrete_sequence=['#c4a050','#a08040','#806030','#604820','#e8c070',
-                                          '#d4b060','#b09050','#907040','#705030','#504020',
-                                          '#f0d080','#3a2010'],
+                color_discrete_sequence=['#c4a050','#4ade80','#60a5fa','#f87171','#a78bfa','#fb923c','#34d399','#f472b6','#facc15','#38bdf8','#818cf8','#e879f9'],
                 hole=0.4
             )
             fig.update_layout(
@@ -421,7 +419,7 @@ elif page == "📸 Add Expense":
 
     # ── TAB 1: Screenshot Upload ──
     with tab1:
-        st.markdown("Upload a payment screenshot (UPI, PhonePe, GPay, Paytm, bank receipt)")
+        st.markdown("Upload a payment screenshot — fill in the details below after uploading!")
         uploaded_file = st.file_uploader(
             "Drop your payment screenshot here",
             type=['png', 'jpg', 'jpeg'],
@@ -436,35 +434,44 @@ elif page == "📸 Add Expense":
                 st.image(image, caption="Uploaded Screenshot", use_container_width=True)
 
             with col_result:
-                st.markdown("**Extracting expense details...**")
-                api_key = st.session_state.get('api_key', '')
+                st.markdown("**Fill in the expense details:**")
+                with st.form("confirm_screenshot_expense"):
+                    amount = st.number_input("Amount (₹) *", value=0.0, min_value=0.0, step=10.0)
+                    exp_date = st.date_input("Date", value=date.today())
+                    description = st.text_input("Description *", placeholder="e.g. Zomato order, Uber ride...")
+                    category = st.selectbox("Category", CATEGORIES)
 
-                if not api_key:
-                    st.error("Please add your Anthropic API key in the sidebar first!")
-                else:
-                    with st.spinner("🔍 Reading screenshot with Claude AI..."):
-                        result = extract_expense_from_image(image, api_key)
+                    if st.form_submit_button("💾 Save Expense", use_container_width=True):
+                        if amount <= 0 or not description:
+                            st.error("Please fill in amount and description!")
+                        else:
+                            add_expense(str(exp_date), amount, category, description, source='screenshot')
+                            st.success(f"✅ ₹{amount:,.0f} saved under {category}!")
+                            st.balloons()
 
-                    if 'error' in result:
-                        st.error(f"Extraction failed: {result['error']}")
-                    else:
-                        st.success("✅ Expense extracted successfully!")
+        st.divider()
+        st.markdown("**📱 Or Paste Your UPI/Bank SMS Message**")
+        st.markdown('<div class="alert-info">Paste any bank SMS like: <em>"₹500 debited from SBI for Zomato on 01-03-2026"</em></div>', unsafe_allow_html=True)
 
-                        with st.form("confirm_screenshot_expense"):
-                            st.markdown("**Confirm or edit the extracted details:**")
-                            amount = st.number_input("Amount (₹)", value=result.get('amount', 0.0), min_value=0.0)
-                            exp_date = st.date_input("Date", value=date.today())
-                            description = st.text_input("Description", value=result.get('description', ''))
-                            category = st.selectbox(
-                                "Category",
-                                CATEGORIES,
-                                index=CATEGORIES.index(result.get('category', 'Others')) if result.get('category') in CATEGORIES else 0
-                            )
+        sms_text = st.text_area("Paste SMS or transaction message here", placeholder="Your account XX1234 is debited by Rs.500 on 01-Mar-26...", height=100)
 
-                            if st.form_submit_button("💾 Save Expense"):
-                                add_expense(str(exp_date), amount, category, description, source='screenshot')
-                                st.success(f"✅ Expense of ₹{amount:,.0f} saved under {category}!")
-                                st.balloons()
+        if st.button("📱 Extract from SMS", use_container_width=True):
+            if sms_text:
+                from utils.ocr_extractor import extract_from_text
+                result = extract_from_text(sms_text)
+                st.success("✅ Details extracted! Review and save below:")
+                with st.form("sms_expense_form"):
+                    amount = st.number_input("Amount (₹)", value=result.get('amount', 0.0), min_value=0.0)
+                    exp_date = st.date_input("Date", value=date.today())
+                    description = st.text_input("Description", value=result.get('description', ''))
+                    category = st.selectbox("Category", CATEGORIES,
+                        index=CATEGORIES.index(result.get('category', 'Others')) if result.get('category') in CATEGORIES else 0)
+                    if st.form_submit_button("💾 Save Expense", use_container_width=True):
+                        add_expense(str(exp_date), amount, category, description, source='sms')
+                        st.success(f"✅ ₹{amount:,.0f} saved under {category}!")
+                        st.balloons()
+            else:
+                st.error("Please paste a message first!")
 
     # ── TAB 2: Manual Entry ──
     with tab2:
