@@ -419,7 +419,9 @@ elif page == "📸 Add Expense":
 
     # ── TAB 1: Screenshot Upload ──
     with tab1:
-        st.markdown("Upload a payment screenshot — fill in the details below after uploading!")
+        st.markdown("Upload a payment screenshot — Tesseract OCR will automatically read it!")
+        st.markdown('<div class="alert-info">📸 Supports UPI, PhonePe, GPay, Paytm, bank receipts</div>', unsafe_allow_html=True)
+
         uploaded_file = st.file_uploader(
             "Drop your payment screenshot here",
             type=['png', 'jpg', 'jpeg'],
@@ -434,12 +436,20 @@ elif page == "📸 Add Expense":
                 st.image(image, caption="Uploaded Screenshot", use_container_width=True)
 
             with col_result:
-                st.markdown("**Fill in the expense details:**")
+                with st.spinner("🔍 Reading screenshot with Tesseract OCR..."):
+                    result = extract_expense_from_image(image)
+
+                if result.get('raw_text'):
+                    with st.expander("📄 Extracted Text"):
+                        st.text(result.get('raw_text', ''))
+
+                st.success("✅ Review and confirm details:")
                 with st.form("confirm_screenshot_expense"):
-                    amount = st.number_input("Amount (₹) *", value=0.0, min_value=0.0, step=10.0)
+                    amount = st.number_input("Amount (₹) *", value=float(result.get('amount', 0.0)), min_value=0.0, step=10.0)
                     exp_date = st.date_input("Date", value=date.today())
-                    description = st.text_input("Description *", placeholder="e.g. Zomato order, Uber ride...")
-                    category = st.selectbox("Category", CATEGORIES)
+                    description = st.text_input("Description *", value=result.get('description', ''), placeholder="e.g. Zomato order, Uber ride...")
+                    category = st.selectbox("Category", CATEGORIES,
+                        index=CATEGORIES.index(result.get('category', 'Others')) if result.get('category') in CATEGORIES else 0)
 
                     if st.form_submit_button("💾 Save Expense", use_container_width=True):
                         if amount <= 0 or not description:
