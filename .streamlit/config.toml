@@ -1,5 +1,2 @@
-﻿[theme]
-primaryColor = '#c4a050'
-backgroundColor = '#0a0e1a'
-secondaryBackgroundColor = '#111827'
-textColor = '#e8e0d0'
+﻿[server]
+fileWatcherType = "none"
