@@ -28,7 +28,7 @@ st.set_page_config(
     page_title="Custos — Your Financial Guardian",
     page_icon="🛡️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded", menu_items={}
 )
 
 # ─── CUSTOM CSS ─────────────────────────────────────────────────────────────────
@@ -752,3 +752,11 @@ elif page == "🎯 Goals & Budget":
                         st.markdown(f'<div class="alert-danger">⚠️ <strong>{row["category"]}</strong>: Over budget by ₹{overspend:,.0f}</div>', unsafe_allow_html=True)
             else:
                 st.info("Set budgets and add expenses to see budget vs actual comparison.")
+
+# Sidebar always expanded CSS fix
+st.markdown("""
+<style>
+[data-testid="collapsedControl"] { display: none !important; }
+[data-testid="stSidebar"] { min-width: 280px !important; }
+</style>
+""", unsafe_allow_html=True)
