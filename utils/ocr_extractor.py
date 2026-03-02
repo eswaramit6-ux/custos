@@ -109,20 +109,6 @@ def extract_from_text(text):
             except:
                 pass
 
-    if amount == 0.0:
-        import re as re2
-        m = re2.search(r'[A-Z][A-Z ]{4,} ([1-9][0-9]{1,5})', clean_text)
-        if m:
-            v = float(m.group(1))
-            if 1 <= v <= 500000:
-                amount = v
-    if amount == 0.0:
-        nums = re2.findall(r'\\b([1-9][0-9]{1,4})\\b', clean_text)
-        for n in nums:
-            v = float(n)
-            if 10 <= v <= 100000 and not 2000 <= v <= 2100:
-                amount = v
-                break
     result['amount'] = amount
 
     # ── Step 3: Date Detection (from original text) ──
