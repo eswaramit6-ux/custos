@@ -51,6 +51,14 @@ def extract_from_text(text):
     # Remove date patterns like "27 Feb", "12 Feb"
     clean_text = re.sub(r'\b\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b', '', clean_text, flags=re.IGNORECASE)
 
+    # Remove Debited from section to avoid picking account balance
+    debited_idx = clean_text.lower().find('debited from')
+    if debited_idx != -1:
+        clean_text = clean_text[:debited_idx]
+    # Remove UTR lines
+    utr_idx = clean_text.lower().find('utr:')
+    if utr_idx != -1:
+        clean_text = clean_text[:utr_idx]
     clean_lower = clean_text.lower()
 
     # ── Step 2: Amount Detection - Priority Order ──
