@@ -90,17 +90,25 @@ def extract_from_text(text):
     ]
 
     for pattern in amount_patterns:
-        match = re.search(pattern, text_lower)
-        if match:
+        matches = re.finditer(pattern, text_lower)
+        for match in matches:
             amount_str = match.group(1).replace(',', '')
             try:
                 amount = float(amount_str)
-                # Sanity check - reasonable transaction amount
-                if 1 <= amount <= 10000000:
+                # Skip years (2020-2030) and very small amounts
+                if 2020 <= amount <= 2030:
+                    continue
+                # Skip transaction IDs (too many digits)
+                if len(amount_str.replace('.','')) > 8:
+                    continue
+                # Reasonable transaction amount
+                if 1 <= amount <= 1000000:
                     result['amount'] = amount
                     break
             except:
                 continue
+        if result['amount'] > 0:
+            break
 
     # ── Date Detection ──
     date_patterns = [
