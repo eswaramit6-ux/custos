@@ -1,47 +1,28 @@
 import re
 import pytesseract
 from PIL import Image
-import io
+import PIL.ImageEnhance as enhance
 from datetime import date
 
 CATEGORIES = [
-    "Food & Dining",
-    "Transportation",
-    "Shopping",
-    "Entertainment",
-    "Healthcare",
-    "Education",
-    "Utilities & Bills",
-    "Groceries",
-    "Travel",
-    "Investment & Savings",
-    "Personal Care",
-    "Rent & Housing",
-    "Others"
+    "Food & Dining", "Transportation", "Shopping", "Entertainment",
+    "Healthcare", "Education", "Utilities & Bills", "Groceries",
+    "Travel", "Investment & Savings", "Personal Care", "Rent & Housing", "Others"
 ]
 
 def extract_expense_from_image(image, api_key=None):
     """Extract expense from screenshot using Tesseract OCR"""
     try:
-        # Preprocess image for better OCR
-        import PIL.ImageEnhance as enhance
         image = image.convert('RGB')
-        
-        # Enhance contrast for better text reading
         enhancer = enhance.Contrast(image)
         image = enhancer.enhance(2.0)
-        
-        # Extract text
         extracted_text = pytesseract.image_to_string(image, config='--psm 6')
-        
+
         if not extracted_text.strip():
             return {
-                'amount': 0.0,
-                'date': str(date.today()),
-                'description': '',
-                'category': 'Others',
-                'type': 'debit',
-                'raw_text': 'No text found in image'
+                'amount': 0.0, 'date': str(date.today()),
+                'description': '', 'category': 'Others',
+                'type': 'debit', 'raw_text': 'No text found'
             }
 
         result = extract_from_text(extracted_text)
@@ -50,67 +31,87 @@ def extract_expense_from_image(image, api_key=None):
 
     except Exception as e:
         return {
-            'amount': 0.0,
-            'date': str(date.today()),
-            'description': '',
-            'category': 'Others',
-            'type': 'debit',
-            'raw_text': f'Error: {str(e)}'
+            'amount': 0.0, 'date': str(date.today()),
+            'description': '', 'category': 'Others',
+            'type': 'debit', 'raw_text': f'Error: {str(e)}'
         }
 
 def extract_from_text(text):
-    """Extract expense details from any text/SMS"""
+    """Extract expense details from any payment text"""
     result = {
-        'amount': 0.0,
-        'date': str(date.today()),
-        'description': '',
-        'category': 'Others',
-        'type': 'debit'
+        'amount': 0.0, 'date': str(date.today()),
+        'description': '', 'category': 'Others', 'type': 'debit'
     }
 
-    text_lower = text.lower()
+    # ── Step 1: Clean text - remove time patterns first ──
+    # Remove times like "12:04 pm", "10:30 am", "12:57 pm"
+    clean_text = re.sub(r'\b\d{1,2}:\d{2}\s*(?:am|pm)\b', '', text, flags=re.IGNORECASE)
+    # Remove years like 2026, 2025
+    clean_text = re.sub(r'\b20\d{2}\b', '', clean_text)
+    # Remove date patterns like "27 Feb", "12 Feb"
+    clean_text = re.sub(r'\b\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b', '', clean_text, flags=re.IGNORECASE)
 
-    # ── Amount Detection ──
-    # Try multiple patterns from most specific to least specific
-    amount_patterns = [
-        # ₹100 or ₹1,000 or ₹1,000.00
-        r'[₹\u20b9]\s*([0-9,]+(?:\.[0-9]{2})?)',
-        # Rs.100 or Rs 100
-        r'rs\.?\s*([0-9,]+(?:\.[0-9]{2})?)',
-        # INR 100
-        r'inr\s*([0-9,]+(?:\.[0-9]{2})?)',
-        # amount: 100 or paid: 100
-        r'(?:amount|amt|paid|total|debited|credited)\s*:?\s*([0-9,]+(?:\.[0-9]{2})?)',
-        # 100 followed by common words
-        r'([0-9,]+(?:\.[0-9]{2})?)\s*(?:paid|debited|credited|transferred)',
-        # Tesseract sometimes reads ₹ as % or other chars
-        r'[%@#&]\s*([0-9,]+(?:\.[0-9]{2})?)',
-        # Last resort: find standalone numbers that look like amounts
-        r'\b([1-9][0-9]{1,6}(?:\.[0-9]{2})?)\b',
-    ]
+    clean_lower = clean_text.lower()
 
-    for pattern in amount_patterns:
-        matches = re.finditer(pattern, text_lower)
-        for match in matches:
-            amount_str = match.group(1).replace(',', '')
+    # ── Step 2: Amount Detection - Priority Order ──
+    amount = 0.0
+
+    # HIGHEST PRIORITY: ₹812.84 or ₹100 (with rupee symbol)
+    match = re.search(r'[₹\u20b9]\s*([0-9,]+(?:\.[0-9]{2})?)', clean_text)
+    if match:
+        try:
+            amount = float(match.group(1).replace(',', ''))
+        except:
+            pass
+
+    # 2nd: Rs.100 or Rs 100
+    if amount == 0.0:
+        match = re.search(r'rs\.?\s*([0-9,]+(?:\.[0-9]{2})?)', clean_lower)
+        if match:
             try:
-                amount = float(amount_str)
-                # Skip years (2020-2030) and very small amounts
-                if 2020 <= amount <= 2030:
-                    continue
-                # Skip transaction IDs (too many digits)
-                if len(amount_str.replace('.','')) > 8:
-                    continue
-                # Reasonable transaction amount
-                if 1 <= amount <= 1000000:
-                    result['amount'] = amount
-                    break
+                amount = float(match.group(1).replace(',', ''))
             except:
-                continue
-        if result['amount'] > 0:
-            break
+                pass
 
-    # ── Date Detection ──
+    # 3rd: INR 100
+    if amount == 0.0:
+        match = re.search(r'inr\s*([0-9,]+(?:\.[0-9]{2})?)', clean_lower)
+        if match:
+            try:
+                amount = float(match.group(1).replace(',', ''))
+            except:
+                pass
+
+    # 4th: amount/paid/total keywords
+    if amount == 0.0:
+        match = re.search(r'(?:amount|amt|paid|total|debited|credited)\s*:?\s*([0-9,]+(?:\.[0-9]{2})?)', clean_lower)
+        if match:
+            try:
+                amount = float(match.group(1).replace(',', ''))
+            except:
+                pass
+
+    # 5th: Tesseract misreads ₹ as % @ # &
+    if amount == 0.0:
+        match = re.search(r'[%@#&]\s*([0-9,]+(?:\.[0-9]{2})?)', clean_text)
+        if match:
+            try:
+                amount = float(match.group(1).replace(',', ''))
+            except:
+                pass
+
+    # 6th: decimal number (very specific like 812.84)
+    if amount == 0.0:
+        match = re.search(r'\b([1-9][0-9]{1,5}\.[0-9]{2})\b', clean_text)
+        if match:
+            try:
+                amount = float(match.group(1))
+            except:
+                pass
+
+    result['amount'] = amount
+
+    # ── Step 3: Date Detection (from original text) ──
     date_patterns = [
         r'(\d{4}[/-]\d{2}[/-]\d{2})',
         r'(\d{2}[/-]\d{2}[/-]\d{4})',
@@ -118,35 +119,35 @@ def extract_from_text(text):
         r'(\d{2}[/-]\d{2}[/-]\d{2})',
     ]
     for pattern in date_patterns:
-        match = re.search(pattern, text_lower)
+        match = re.search(pattern, text.lower())
         if match:
             result['date'] = match.group(1)
             break
 
-    # ── Merchant/Description Detection ──
-    # Look for known merchants first
+    # ── Step 4: Merchant Detection ──
     known_merchants = [
         'zomato', 'swiggy', 'amazon', 'flipkart', 'uber', 'ola', 'rapido',
         'phonepe', 'paytm', 'gpay', 'google pay', 'netflix', 'spotify',
         'hotstar', 'bigbasket', 'blinkit', 'zepto', 'myntra', 'ajio',
         'apollo', '1mg', 'jio', 'airtel', 'vodafone', 'irctc', 'makemytrip',
-        'oyo', 'zerodha', 'groww', 'dmart', 'meesho', 'nykaa'
+        'oyo', 'zerodha', 'groww', 'dmart', 'meesho', 'nykaa', 'playo',
+        'swiggy instamart', 'dunzo', 'byjus', 'unacademy', 'cred'
     ]
-    
-    text_lower_check = text.lower()
+
+    text_lower = text.lower()
     for merchant in known_merchants:
-        if merchant in text_lower_check:
+        if merchant in text_lower:
             result['description'] = merchant.title()
             result['category'] = categorize_by_keywords(merchant)
             break
 
-    # If no known merchant found, try to extract name
+    # If no known merchant, try regex
     if not result['description']:
-        merchant_patterns = [
+        patterns = [
             r'(?:paid to|to|sent to)\s+([A-Za-z][A-Za-z\s]{2,25}?)(?:\n|\r|$)',
-            r'(?:merchant|store|vendor)\s*:?\s*([A-Za-z][A-Za-z\s]{2,25}?)(?:\n|\r|$)',
+            r'(?:merchant|store)\s*:?\s*([A-Za-z][A-Za-z\s]{2,25}?)(?:\n|\r|$)',
         ]
-        for pattern in merchant_patterns:
+        for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 name = match.group(1).strip()
@@ -154,20 +155,20 @@ def extract_from_text(text):
                     result['description'] = name.title()
                     break
 
-    # Final fallback for description
+    # Fallback description
     if not result['description']:
-        # Use first meaningful line
-        lines = [l.strip() for l in text.split('\n') if len(l.strip()) > 3 and l.strip().replace(' ', '').isalpha()]
+        lines = [l.strip() for l in text.split('\n')
+                 if len(l.strip()) > 3 and l.strip().replace(' ', '').isalpha()]
         if lines:
             result['description'] = lines[0][:50]
 
-    # ── Debit/Credit Detection ──
+    # ── Step 5: Debit/Credit ──
     if any(w in text_lower for w in ['debited', 'debit', 'paid', 'sent', 'withdrawn']):
         result['type'] = 'debit'
     elif any(w in text_lower for w in ['credited', 'credit', 'received', 'added', 'refund']):
         result['type'] = 'credit'
 
-    # ── Category ──
+    # ── Step 6: Category ──
     if result['description']:
         result['category'] = categorize_by_keywords(result['description'].lower())
 
@@ -183,7 +184,7 @@ def categorize_by_keywords(description):
         "Transportation": ["uber", "ola", "auto", "bus", "metro", "petrol", "fuel", "rapido", "taxi", "train", "ticket", "transport", "cab", "rickshaw", "irctc", "redbus", "toll", "parking"],
         "Groceries": ["bigbasket", "grofers", "blinkit", "zepto", "grocery", "vegetables", "milk", "dmart", "supermarket", "kirana", "fruits", "rice", "dal", "atta"],
         "Shopping": ["amazon", "flipkart", "myntra", "ajio", "clothes", "shoes", "mall", "shop", "meesho", "nykaa", "decathlon", "croma", "purchase"],
-        "Entertainment": ["netflix", "hotstar", "spotify", "prime", "movie", "cinema", "pvr", "inox", "game", "youtube", "disney", "zee5", "sonyliv", "bookmyshow"],
+        "Entertainment": ["netflix", "hotstar", "spotify", "prime", "movie", "cinema", "pvr", "inox", "game", "youtube", "disney", "zee5", "sonyliv", "bookmyshow", "playo"],
         "Healthcare": ["pharmacy", "hospital", "doctor", "medicine", "clinic", "medical", "apollo", "1mg", "netmeds", "pharmeasy", "health", "lab", "diagnostic"],
         "Utilities & Bills": ["electricity", "water", "gas", "internet", "wifi", "broadband", "jio", "airtel", "vodafone", "recharge", "bsnl", "bill", "utility"],
         "Education": ["course", "book", "college", "school", "tuition", "udemy", "coursera", "byju", "unacademy", "fees", "exam", "study"],
