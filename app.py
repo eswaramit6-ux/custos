@@ -599,7 +599,7 @@ elif page == "📊 Analytics":
                                        format_func=lambda x: datetime(2026, x, 1).strftime('%B'))
 
     cat_totals = get_category_totals(selected_year, selected_month)
-    all_expenses = get_expenses(selected_year, selected_month)
+    all_expenses = get_expenses(limit=500)
 
     if cat_totals.empty:
         st.info("No expenses found for this period. Add some expenses to see analytics!")
