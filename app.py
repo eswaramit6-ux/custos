@@ -17,6 +17,7 @@ from utils.ocr_extractor import (
     extract_expense_from_image, categorize_text_expense,
     parse_csv_bank_statement, CATEGORIES
 )
+from utils.pdf_advisor import extract_text_from_pdf, generate_book_based_advice
 from utils.financial_advisor import (
     generate_rule_based_advice, analyze_spending_health,
     get_savings_rate_advice, calculate_financial_health_score,
@@ -297,7 +298,8 @@ with st.sidebar:
     st.markdown("#### 📍 Navigation")
     page = st.radio(
         "",
-        ["🏠 Dashboard", "📸 Add Expense", "📊 Analytics", "🤖 AI Advisor", "🎯 Goals & Budget"],
+        ["🏠 Dashboard", "📸 Add Expense", "📊 Analytics", "🤖 AI Advisor", "🎯 Goals & Budget",
+    "📚 Book Advisor"],
         label_visibility="collapsed"
     )
 
