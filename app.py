@@ -904,12 +904,20 @@ elif page == "🤝 Splitwise":
     st.markdown('<div class="section-header">SPLITWISE GROUP EXPENSES</div>', unsafe_allow_html=True)
     st.markdown('<div class="alert-info">Import your group expenses from Splitwise and analyze your shared spending!</div>', unsafe_allow_html=True)
 
-    # Get API key from secrets or sidebar
-    splitwise_key = st.secrets.get("SPLITWISE_API_KEY", "") if hasattr(st, 'secrets') else ""
+    # Get Splitwise API key
+    splitwise_key = ""
+    try:
+        splitwise_key = st.secrets["SPLITWISE_API_KEY"]
+    except:
+        pass
     
     if not splitwise_key:
-        splitwise_key = st.text_input("Enter Splitwise API Key", type="password", 
-                                       placeholder="Your Splitwise API key...")
+        splitwise_key = st.text_input(
+            "Enter Splitwise API Key",
+            type="password",
+            placeholder="Paste your Splitwise API key here...",
+            help="Get your key from splitwise.com/apps"
+        )
 
     if splitwise_key:
         # Get user info
