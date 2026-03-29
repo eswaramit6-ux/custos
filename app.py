@@ -22,7 +22,9 @@ from utils.splitwise_integration import get_splitwise_expenses, get_splitwise_us
 from utils.financial_advisor import (
     generate_rule_based_advice, analyze_spending_health,
     get_savings_rate_advice, calculate_financial_health_score,
-    FINANCIAL_GURUS, INDIAN_FINANCIAL_ADVICE
+    FINANCIAL_GURUS, INDIAN_FINANCIAL_ADVICE,
+    get_80c_recommendations, get_tax_saving_summary,
+    get_indian_investment_plan, calculate_sip_returns
 )
 
 # ─── PAGE CONFIG ────────────────────────────────────────────────────────────────
@@ -811,17 +813,117 @@ elif page == "🤖 AI Advisor":
         income = st.session_state.get('monthly_income', 0)
         cat_totals = get_category_totals(now.year, now.month)
 
-        if cat_totals.empty:
-            st.markdown("""
-            <div class="advice-card" style="text-align:center; padding:2rem">
-                <div style="font-size:2rem">📊</div>
-                <div style="color:#c4a050; margin-top:0.5rem">No expenses yet!</div>
-                <div style="font-size:0.85rem; color:rgba(232,224,208,0.6); margin-top:0.5rem">
-                    Add some expenses first to get personalized financial advice
+        # Indian Finance Tabs
+        advisor_tab1, advisor_tab2, advisor_tab3 = st.tabs(["🤖 Guru Advice", "🇮🇳 Indian Investment Plan", "💰 Tax Calculator"])
+
+        with advisor_tab2:
+            st.markdown("### 🇮🇳 Your Personalized Indian Investment Plan")
+            if income <= 0:
+                st.warning("Set your monthly income in the sidebar first!")
+            else:
+                total_exp = cat_totals['total'].sum() if not cat_totals.empty else 0
+                plan, savings, savings_rate = get_indian_investment_plan(income, total_exp)
+
+                savings_color = "#4ade80" if savings >= 0 else "#f87171"
+                st.markdown(f"""
+                <div class="metric-card" style="margin-bottom:1rem">
+                    <div style="display:flex; justify-content:space-between">
+                        <div>
+                            <div style="font-size:0.8rem;color:rgba(232,224,208,0.5)">MONTHLY SAVINGS</div>
+                            <div style="font-family:Cinzel,serif;font-size:1.8rem;color:{savings_color}">₹{savings:,.0f}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.8rem;color:rgba(232,224,208,0.5)">SAVINGS RATE</div>
+                            <div style="font-family:Cinzel,serif;font-size:1.8rem;color:{savings_color}">{savings_rate:.1f}%</div>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
+                """, unsafe_allow_html=True)
+
+                st.markdown("**Step-by-step investment roadmap:**")
+                for step in plan:
+                    with st.expander(f"{step['icon']} Priority {step['priority']}: {step['step']} — ₹{step['monthly']:,}/month"):
+                        st.markdown(f"**Where:** {step['where']}")
+                        st.markdown(f"**Why:** {step['why']}")
+                        if step['target']:
+                            st.markdown(f"**Annual Target:** ₹{step['target']:,}")
+
+                # SIP Calculator
+                st.markdown("---")
+                st.markdown("### 📊 SIP Returns Calculator")
+                col_s1, col_s2, col_s3 = st.columns(3)
+                with col_s1:
+                    sip_amt = st.number_input("Monthly SIP (₹)", min_value=500, max_value=100000, value=max(500, int(savings*0.5) if savings > 0 else 500), step=500)
+                with col_s2:
+                    sip_years = st.selectbox("Duration", [5, 10, 15, 20, 25, 30], index=1)
+                with col_s3:
+                    sip_return = st.selectbox("Expected Return %", [8, 10, 12, 15], index=2)
+
+                maturity, invested, returns = calculate_sip_returns(sip_amt, sip_years, sip_return)
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:1rem">
+                        <div style="text-align:center">
+                            <div style="font-size:0.75rem;color:rgba(232,224,208,0.5)">INVESTED</div>
+                            <div style="font-family:Cinzel,serif;font-size:1.3rem;color:#c4a050">₹{invested:,.0f}</div>
+                        </div>
+                        <div style="text-align:center">
+                            <div style="font-size:0.75rem;color:rgba(232,224,208,0.5)">RETURNS</div>
+                            <div style="font-family:Cinzel,serif;font-size:1.3rem;color:#4ade80">₹{returns:,.0f}</div>
+                        </div>
+                        <div style="text-align:center">
+                            <div style="font-size:0.75rem;color:rgba(232,224,208,0.5)">MATURITY VALUE</div>
+                            <div style="font-family:Cinzel,serif;font-size:1.3rem;color:#c4a050">₹{maturity:,.0f}</div>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        with advisor_tab3:
+            st.markdown("### 💰 Indian Tax Calculator & Savings")
+            if income <= 0:
+                st.warning("Set your monthly income in the sidebar first!")
+            else:
+                tax_data = get_tax_saving_summary(income)
+
+                col_t1, col_t2 = st.columns(2)
+                with col_t1:
+                    st.markdown(f"""
+                    <div class="advice-card">
+                        <div style="color:#c4a050;font-family:Cinzel,serif;margin-bottom:0.8rem">NEW TAX REGIME</div>
+                        <div style="font-size:1.5rem;font-family:Cinzel,serif">₹{tax_data['tax_new_regime']:,.0f}</div>
+                        <div style="font-size:0.8rem;color:rgba(232,224,208,0.5)">No deductions needed. Simpler filing.</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col_t2:
+                    st.markdown(f"""
+                    <div class="advice-card">
+                        <div style="color:#c4a050;font-family:Cinzel,serif;margin-bottom:0.8rem">OLD REGIME + DEDUCTIONS</div>
+                        <div style="font-size:1.5rem;font-family:Cinzel,serif">₹{tax_data['tax_old_with_deductions']:,.0f}</div>
+                        <div style="font-size:0.8rem;color:rgba(232,224,208,0.5)">With 80C + 80D + NPS deductions.</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                better = tax_data['better_regime']
+                tax_benefit = tax_data['tax_new_regime'] - tax_data['tax_old_with_deductions']
+                if better == "old":
+                    st.success(f"✅ Old regime saves you ₹{tax_benefit:,.0f}/year! Invest in 80C instruments.")
+                else:
+                    st.info(f"ℹ️ New regime is better for you by ₹{abs(tax_benefit):,.0f}/year. No need for complex investments.")
+
+                st.markdown("### 🎯 80C Investment Recommendations")
+                recs = get_80c_recommendations(income, 20)
+                for rec in recs:
+                    with st.expander(f"{rec['icon']} {rec['product']} — ₹{rec['monthly_amount']:,}/month"):
+                        col_r1, col_r2 = st.columns(2)
+                        with col_r1:
+                            st.markdown(f"**Annual Amount:** ₹{rec['annual_amount']:,}")
+                            st.markdown(f"**Risk Level:** {rec['risk']}")
+                        with col_r2:
+                            st.markdown(f"**Platform:** {rec['platform']}")
+                        st.markdown(f"**Benefit:** {rec['benefit']}")
+
+        with advisor_tab1:
             # Financial Health Score
             score, grade, reasons = calculate_financial_health_score(cat_totals, income)
             score_color = "#4ade80" if score >= 80 else "#facc15" if score >= 60 else "#f87171"

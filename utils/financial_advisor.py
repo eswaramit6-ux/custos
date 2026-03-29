@@ -1,4 +1,4 @@
-# Rule-based Financial Advisor — No API needed!
+# Rule-based Financial Advisor — Indian Finance Edition
 
 FINANCIAL_GURUS = {
     "Warren Buffett": {
@@ -85,7 +85,6 @@ SPENDING_INSIGHTS = {
     "Education": {"healthy_percent": 10, "tip": "Look for free resources on YouTube and Coursera before paying for courses."},
 }
 
-# Rule-based advice templates per guru
 GURU_ADVICE_TEMPLATES = {
     "Warren Buffett": {
         "high_food": "Your food spending is high. As I always say — 'Do not save what is left after spending, but spend what is left after saving.' Cut dining out and redirect that money into index fund SIPs.",
@@ -121,20 +120,276 @@ GURU_ADVICE_TEMPLATES = {
     }
 }
 
+
+# ─────────────────────────────────────────────────────────────────
+# INDIAN FINANCE: TAX SLAB CALCULATOR
+# ─────────────────────────────────────────────────────────────────
+
+INDIAN_TAX_SLABS_NEW = [
+    (300000, 0),
+    (600000, 0.05),
+    (900000, 0.10),
+    (1200000, 0.15),
+    (1500000, 0.20),
+    (float('inf'), 0.30),
+]
+
+INDIAN_TAX_SLABS_OLD = [
+    (250000, 0),
+    (500000, 0.05),
+    (1000000, 0.20),
+    (float('inf'), 0.30),
+]
+
+def calculate_indian_tax(annual_income, regime="new"):
+    """Calculate income tax under old or new Indian tax regime"""
+    slabs = INDIAN_TAX_SLABS_NEW if regime == "new" else INDIAN_TAX_SLABS_OLD
+    tax = 0
+    prev_limit = 0
+    for limit, rate in slabs:
+        if annual_income <= prev_limit:
+            break
+        taxable = min(annual_income, limit) - prev_limit
+        tax += taxable * rate
+        prev_limit = limit
+    # 4% health & education cess
+    tax += tax * 0.04
+    return round(tax)
+
+
+# ─────────────────────────────────────────────────────────────────
+# INDIAN FINANCE: 80C INVESTMENT OPTIMIZER
+# ─────────────────────────────────────────────────────────────────
+
+def get_80c_recommendations(monthly_income, savings_rate_pct):
+    """Recommend 80C investments based on income and savings"""
+    annual_income = monthly_income * 12
+    monthly_savings = monthly_income * (savings_rate_pct / 100)
+    annual_savings = monthly_savings * 12
+    limit_80c = 150000  # ₹1.5L
+
+    recommendations = []
+
+    # ELSS (best for long-term wealth + tax saving)
+    elss_amount = min(annual_savings * 0.4, limit_80c * 0.6)
+    recommendations.append({
+        "product": "ELSS Mutual Fund",
+        "annual_amount": round(elss_amount),
+        "monthly_amount": round(elss_amount / 12),
+        "benefit": "Market-linked returns (12-15% historical), 3-year lock-in, qualifies for 80C",
+        "platform": "Zerodha Coin, Groww, Paytm Money",
+        "risk": "Medium-High",
+        "icon": "📈"
+    })
+
+    # PPF (safe, tax-free)
+    ppf_amount = min(annual_savings * 0.3, 150000)
+    recommendations.append({
+        "product": "PPF (Public Provident Fund)",
+        "annual_amount": round(ppf_amount),
+        "monthly_amount": round(ppf_amount / 12),
+        "benefit": "7.1% guaranteed returns, completely tax-free, 15-year lock-in, qualifies for 80C",
+        "platform": "Any nationalized bank or Post Office",
+        "risk": "Zero Risk",
+        "icon": "🏛️"
+    })
+
+    # NPS (extra ₹50K deduction under 80CCD)
+    nps_amount = min(50000, annual_savings * 0.15)
+    recommendations.append({
+        "product": "NPS (National Pension System)",
+        "annual_amount": round(nps_amount),
+        "monthly_amount": round(nps_amount / 12),
+        "benefit": "Additional ₹50,000 deduction under 80CCD(1B) — OVER and ABOVE the ₹1.5L 80C limit!",
+        "platform": "NPS Trust website, eNPS",
+        "risk": "Low-Medium",
+        "icon": "🏦"
+    })
+
+    # Health Insurance (80D)
+    health_amount = 25000 if annual_income < 1000000 else 50000
+    recommendations.append({
+        "product": "Health Insurance (80D)",
+        "annual_amount": health_amount,
+        "monthly_amount": round(health_amount / 12),
+        "benefit": f"Deduction up to ₹{health_amount:,} under Section 80D. Protects against medical emergencies.",
+        "platform": "PolicyBazaar, HDFC Ergo, Star Health",
+        "risk": "Zero Risk (Insurance)",
+        "icon": "🏥"
+    })
+
+    # SGB (Sovereign Gold Bonds)
+    sgb_amount = min(annual_savings * 0.1, 48000)
+    recommendations.append({
+        "product": "Sovereign Gold Bonds (SGB)",
+        "annual_amount": round(sgb_amount),
+        "monthly_amount": round(sgb_amount / 12),
+        "benefit": "2.5% annual interest + gold price appreciation. No storage risk. Capital gains tax-free on maturity.",
+        "platform": "RBI Retail Direct, Zerodha, HDFC Bank",
+        "risk": "Low-Medium",
+        "icon": "🥇"
+    })
+
+    return recommendations
+
+
+# ─────────────────────────────────────────────────────────────────
+# INDIAN FINANCE: SIP CALCULATOR
+# ─────────────────────────────────────────────────────────────────
+
+def calculate_sip_returns(monthly_amount, years, annual_return_pct=12):
+    """Calculate SIP maturity value"""
+    r = annual_return_pct / 100 / 12
+    n = years * 12
+    if r == 0:
+        return monthly_amount * n
+    maturity = monthly_amount * (((1 + r) ** n - 1) / r) * (1 + r)
+    invested = monthly_amount * n
+    returns = maturity - invested
+    return round(maturity), round(invested), round(returns)
+
+
+# ─────────────────────────────────────────────────────────────────
+# INDIAN FINANCE: TAX SAVING SUMMARY
+# ─────────────────────────────────────────────────────────────────
+
+def get_tax_saving_summary(monthly_income):
+    """Generate complete tax saving summary for an Indian user"""
+    annual_income = monthly_income * 12
+
+    tax_old = calculate_indian_tax(annual_income, "old")
+    tax_new = calculate_indian_tax(annual_income, "new")
+
+    # Old regime with max 80C + 80D + NPS deductions
+    deductions = 150000 + 25000 + 50000  # 80C + 80D + NPS
+    taxable_old = max(0, annual_income - deductions)
+    tax_old_with_deductions = calculate_indian_tax(taxable_old, "old")
+    tax_saved = tax_old - tax_old_with_deductions
+
+    return {
+        "annual_income": annual_income,
+        "tax_new_regime": tax_new,
+        "tax_old_regime": tax_old,
+        "tax_old_with_deductions": tax_old_with_deductions,
+        "max_tax_saved": tax_saved,
+        "better_regime": "new" if tax_new < tax_old_with_deductions else "old",
+        "deductions_available": deductions
+    }
+
+
+# ─────────────────────────────────────────────────────────────────
+# INDIAN FINANCE: PERSONALIZED INVESTMENT PLAN
+# ─────────────────────────────────────────────────────────────────
+
+def get_indian_investment_plan(monthly_income, monthly_expenses, age=25):
+    """Generate a complete personalized Indian investment plan"""
+    savings = monthly_income - monthly_expenses
+    savings_rate = (savings / monthly_income * 100) if monthly_income > 0 else 0
+    annual_income = monthly_income * 12
+
+    plan = []
+
+    # Step 1: Emergency Fund
+    emergency_target = monthly_expenses * 6
+    plan.append({
+        "priority": 1,
+        "step": "Build Emergency Fund",
+        "target": emergency_target,
+        "monthly": min(savings * 0.3, emergency_target / 6),
+        "where": "High-yield Savings Account or Liquid Mutual Fund",
+        "why": f"6 months of expenses (₹{emergency_target:,.0f}) as safety net before investing",
+        "icon": "🛡️"
+    })
+
+    # Step 2: Term Insurance
+    term_cover = annual_income * 12
+    plan.append({
+        "priority": 2,
+        "step": "Get Term Insurance",
+        "target": term_cover,
+        "monthly": round(term_cover * 0.0003 / 12),
+        "where": "LIC, HDFC Life, ICICI Prudential",
+        "why": f"Cover of ₹{term_cover/100000:.0f}L (12x annual income) for financial security",
+        "icon": "🏥"
+    })
+
+    # Step 3: Health Insurance
+    plan.append({
+        "priority": 3,
+        "step": "Health Insurance",
+        "target": 500000,
+        "monthly": 1500,
+        "where": "Star Health, HDFC Ergo, Niva Bupa",
+        "why": "₹5L cover protects against medical emergencies + ₹25,000 tax deduction under 80D",
+        "icon": "💊"
+    })
+
+    # Step 4: 80C Tax Saving
+    elss_monthly = min(savings * 0.25, 12500)
+    plan.append({
+        "priority": 4,
+        "step": "ELSS for 80C Tax Saving",
+        "target": 150000,
+        "monthly": round(elss_monthly),
+        "where": "Zerodha Coin, Groww — Mirae Asset ELSS, Axis ELSS",
+        "why": f"Save up to ₹46,800 in taxes annually while building wealth with market-linked returns",
+        "icon": "📈"
+    })
+
+    # Step 5: PPF
+    ppf_monthly = min(savings * 0.15, 12500)
+    plan.append({
+        "priority": 5,
+        "step": "PPF — Safe Long-term Savings",
+        "target": 150000,
+        "monthly": round(ppf_monthly),
+        "where": "SBI, Post Office, HDFC Bank",
+        "why": "7.1% guaranteed, completely tax-free returns. Best for risk-averse investors.",
+        "icon": "🏛️"
+    })
+
+    # Step 6: Nifty 50 SIP
+    sip_monthly = min(savings * 0.3, 10000)
+    maturity_10yr, invested_10yr, returns_10yr = calculate_sip_returns(sip_monthly, 10)
+    plan.append({
+        "priority": 6,
+        "step": "Nifty 50 Index Fund SIP",
+        "target": None,
+        "monthly": round(sip_monthly),
+        "where": "UTI Nifty 50, HDFC Index Fund, Nippon India Index Fund",
+        "why": f"₹{sip_monthly:,.0f}/month for 10 years @ 12% = ₹{maturity_10yr:,.0f} (invested: ₹{invested_10yr:,.0f})",
+        "icon": "💹"
+    })
+
+    # Step 7: NPS (if income > 5L)
+    if annual_income > 500000:
+        nps_monthly = min(savings * 0.1, 4167)
+        plan.append({
+            "priority": 7,
+            "step": "NPS — Extra ₹50K Tax Deduction",
+            "target": 50000,
+            "monthly": round(nps_monthly),
+            "where": "eNPS (npstrust.org.in), Zerodha",
+            "why": "Additional ₹50,000 deduction under 80CCD(1B) — ON TOP of the ₹1.5L 80C limit!",
+            "icon": "🏦"
+        })
+
+    return plan, savings, savings_rate
+
+
 def generate_rule_based_advice(category_totals, total_income, guru="Warren Buffett"):
     """Generate smart rule-based financial advice based on spending patterns"""
-    
+
     if total_income <= 0:
         return "Please set your monthly income in the sidebar to get personalized advice."
 
     guru_data = FINANCIAL_GURUS.get(guru, FINANCIAL_GURUS["Warren Buffett"])
     templates = GURU_ADVICE_TEMPLATES.get(guru, GURU_ADVICE_TEMPLATES["Warren Buffett"])
-    
+
     total_expenses = category_totals['total'].sum()
     savings = total_income - total_expenses
     savings_rate = (savings / total_income) * 100
 
-    # Build spending dict
     spending = {}
     for _, row in category_totals.iterrows():
         spending[row['category']] = {
@@ -159,7 +414,7 @@ def generate_rule_based_advice(category_totals, total_income, guru="Warren Buffe
 
     # ── SPENDING ANALYSIS ──
     advice_parts.append("\n## 🔍 Spending Analysis")
-    
+
     problem_areas = []
     good_areas = []
 
@@ -174,7 +429,7 @@ def generate_rule_based_advice(category_totals, total_income, guru="Warren Buffe
     if problem_areas:
         for cat, amount, pct, healthy in problem_areas[:3]:
             advice_parts.append(f"- ⚠️ **{cat}**: ₹{amount:,.0f} ({pct:.1f}% of income) — recommended max is {healthy}%")
-    
+
     if good_areas:
         for cat, amount, pct in good_areas[:2]:
             advice_parts.append(f"- ✅ **{cat}**: ₹{amount:,.0f} ({pct:.1f}%) — well managed!")
@@ -182,7 +437,6 @@ def generate_rule_based_advice(category_totals, total_income, guru="Warren Buffe
     # ── GURU SPECIFIC ADVICE ──
     advice_parts.append(f"\n## 💡 {guru}'s Advice For You")
 
-    # Check specific high spending areas
     food_pct = spending.get("Food & Dining", {}).get('percent', 0)
     shopping_pct = spending.get("Shopping", {}).get('percent', 0)
     entertainment_pct = spending.get("Entertainment", {}).get('percent', 0)
@@ -201,13 +455,13 @@ def generate_rule_based_advice(category_totals, total_income, guru="Warren Buffe
 
     # ── TOP 3 ACTION ITEMS ──
     advice_parts.append("\n## 🎯 Top 3 Action Items")
-    
+
     actions = []
-    
+
     if savings_rate < 20:
         gap = total_income * 0.20 - savings
         actions.append(f"Increase savings by ₹{gap:,.0f}/month to reach the 20% savings target")
-    
+
     if problem_areas:
         top_problem = problem_areas[0]
         target = total_income * (top_problem[3] / 100)
@@ -215,7 +469,7 @@ def generate_rule_based_advice(category_totals, total_income, guru="Warren Buffe
         actions.append(f"Reduce **{top_problem[0]}** spending by ₹{save:,.0f} to bring it within healthy limits")
 
     actions.append(f"Start or increase a monthly SIP — even ₹{min(max(int(savings * 0.5), 500), 5000):,}/month makes a significant difference over time")
-    
+
     if total_income > 50000:
         actions.append("Maximize your Section 80C deduction (₹1.5L limit) through ELSS or PPF to save on taxes")
     else:
@@ -224,16 +478,28 @@ def generate_rule_based_advice(category_totals, total_income, guru="Warren Buffe
     for i, action in enumerate(actions[:3], 1):
         advice_parts.append(f"{i}. {action}")
 
-    # ── INVESTMENT RECOMMENDATION ──
-    advice_parts.append("\n## 📈 Investment Recommendation")
+    # ── INDIAN INVESTMENT PLAN ──
+    advice_parts.append("\n## 📈 Your Personalized Indian Investment Plan")
     advice_parts.append(templates['investment_tip'])
 
     if savings > 0:
-        sip_amount = max(int(savings * 0.6), 500)
-        fd_amount = max(int(savings * 0.2), 500)
-        advice_parts.append(f"\nBased on your ₹{savings:,.0f} monthly savings, consider:")
-        advice_parts.append(f"- **₹{sip_amount:,}/month** → Nifty 50 Index Fund SIP")
-        advice_parts.append(f"- **₹{fd_amount:,}/month** → Emergency Fund FD")
+        # SIP projection
+        sip_amount = max(int(savings * 0.5), 500)
+        maturity_10, invested_10, returns_10 = calculate_sip_returns(sip_amount, 10)
+        maturity_20, invested_20, returns_20 = calculate_sip_returns(sip_amount, 20)
+
+        advice_parts.append(f"\n**If you invest ₹{sip_amount:,}/month in a Nifty 50 SIP:**")
+        advice_parts.append(f"- In 10 years: ₹{maturity_10:,.0f} (invested ₹{invested_10:,.0f}, returns ₹{returns_10:,.0f})")
+        advice_parts.append(f"- In 20 years: ₹{maturity_20:,.0f} (invested ₹{invested_20:,.0f}, returns ₹{returns_20:,.0f})")
+
+        # Tax saving summary
+        tax_summary = get_tax_saving_summary(total_income)
+        advice_parts.append(f"\n**Tax Saving Opportunity:**")
+        advice_parts.append(f"- Annual Income: ₹{tax_summary['annual_income']:,.0f}")
+        advice_parts.append(f"- Tax under New Regime: ₹{tax_summary['tax_new_regime']:,.0f}")
+        advice_parts.append(f"- Tax under Old Regime (with deductions): ₹{tax_summary['tax_old_with_deductions']:,.0f}")
+        advice_parts.append(f"- **You can save up to ₹{tax_summary['max_tax_saved']:,.0f} in taxes using 80C + 80D + NPS!**")
+        advice_parts.append(f"- **Recommended Regime: {'New' if tax_summary['better_regime'] == 'new' else 'Old'} Tax Regime**")
 
     # ── MOTIVATIONAL QUOTE ──
     advice_parts.append(f"\n## 💬 {guru} Says")
@@ -284,7 +550,7 @@ def get_savings_rate_advice(total_expenses, total_income):
 def calculate_financial_health_score(category_totals, total_income):
     """Calculate a financial health score out of 100"""
     if total_income <= 0:
-        return 0, "No income data"
+        return 0, "No income data", []
 
     score = 100
     reasons = []
@@ -292,7 +558,6 @@ def calculate_financial_health_score(category_totals, total_income):
     total_expenses = category_totals['total'].sum()
     savings_rate = ((total_income - total_expenses) / total_income) * 100
 
-    # Savings rate scoring (40 points)
     if savings_rate >= 30:
         reasons.append("✅ Excellent savings rate (+40)")
     elif savings_rate >= 20:
@@ -308,7 +573,6 @@ def calculate_financial_health_score(category_totals, total_income):
         score -= 40
         reasons.append("🚨 Overspending (-40)")
 
-    # Category overspending (60 points)
     spending = {row['category']: (row['total'] / total_income) * 100
                 for _, row in category_totals.iterrows()}
 
