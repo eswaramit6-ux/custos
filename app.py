@@ -541,8 +541,10 @@ elif page == "📸 Add Expense":
                 use_ai_cat = st.checkbox("🤖 Auto-categorize with AI", value=True)
 
             if use_ai_cat:
-                category_options = ["(Auto-detect)"] + CATEGORIES
-                category = st.selectbox("Category", category_options)
+                # Auto-categorize immediately using keywords (no API needed)
+                auto_cat = categorize_text_expense(description, amount) if description else 'Others'
+                cat_index = CATEGORIES.index(auto_cat) if auto_cat in CATEGORIES else 0
+                category = st.selectbox("Category", CATEGORIES, index=cat_index)
             else:
                 category = st.selectbox("Category", CATEGORIES)
 
@@ -552,11 +554,6 @@ elif page == "📸 Add Expense":
                 if amount <= 0 or not description:
                     st.error("Please fill in all required fields!")
                 else:
-                    if use_ai_cat and category == "(Auto-detect)":
-                        api_key = st.session_state.get('api_key', '')
-                        with st.spinner("Categorizing..."):
-                            category = categorize_text_expense(description, amount, api_key) if api_key else 'Others'
-
                     add_expense(str(exp_date), amount, category, description, source='manual')
                     st.success(f"✅ ₹{amount:,.0f} added under **{category}**!")
                     
