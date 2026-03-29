@@ -475,19 +475,24 @@ elif page == "📸 Add Expense":
             if sms_text:
                 from utils.ocr_extractor import extract_from_text
                 result = extract_from_text(sms_text)
-                st.success("✅ Details extracted! Review and save below:")
-                with st.form("sms_expense_form"):
-                    amount = st.number_input("Amount (₹)", value=result.get('amount', 0.0), min_value=0.0)
-                    exp_date = st.date_input("Date", value=date.today())
-                    description = st.text_input("Description", value=result.get('description', ''))
-                    category = st.selectbox("Category", CATEGORIES,
-                        index=CATEGORIES.index(result.get('category', 'Others')) if result.get('category') in CATEGORIES else 0)
-                    if st.form_submit_button("💾 Save Expense", use_container_width=True):
-                        add_expense(str(exp_date), amount, category, description, source='sms')
-                        st.success(f"✅ ₹{amount:,.0f} saved under {category}!")
-                        st.balloons()
+                st.session_state['sms_result'] = result
             else:
                 st.error("Please paste a message first!")
+
+        if 'sms_result' in st.session_state:
+            result = st.session_state['sms_result']
+            st.success("✅ Details extracted! Review and save below:")
+            with st.form("sms_expense_form"):
+                amount = st.number_input("Amount (₹)", value=float(result.get('amount', 0.0)), min_value=0.0)
+                exp_date = st.date_input("Date", value=date.today())
+                description = st.text_input("Description", value=result.get('description', ''))
+                category = st.selectbox("Category", CATEGORIES,
+                    index=CATEGORIES.index(result.get('category', 'Others')) if result.get('category') in CATEGORIES else 0)
+                if st.form_submit_button("💾 Save Expense", use_container_width=True):
+                    add_expense(str(exp_date), amount, category, description, source='sms')
+                    st.success(f"✅ ₹{amount:,.0f} saved under {category}!")
+                    del st.session_state['sms_result']
+                    st.balloons()
 
     # ── TAB 2: Manual Entry ──
     with tab2:
