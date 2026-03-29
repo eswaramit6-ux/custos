@@ -367,6 +367,41 @@ if page == "🏠 Dashboard":
 
     st.markdown("<br>", unsafe_allow_html=True)
 
+    # ── 80C Tax Saving Progress Tracker ──
+    investments = get_expenses(limit=500)
+    annual_limit_80c = 150000
+    if not investments.empty:
+        inv_expenses = investments[investments['category'] == 'Investment & Savings']
+        total_invested_80c = inv_expenses['amount'].sum() if not inv_expenses.empty else 0
+        pct_80c = min((total_invested_80c / annual_limit_80c) * 100, 100)
+        remaining_80c = max(annual_limit_80c - total_invested_80c, 0)
+        color_80c = "#4ade80" if pct_80c >= 80 else "#facc15" if pct_80c >= 40 else "#f87171"
+        st.markdown(f"""
+        <div class="metric-card" style="margin-bottom:1rem">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem">
+                <div style="font-size:0.85rem;color:rgba(232,224,208,0.7)">🎯 <b>Section 80C Tax Saving Progress</b></div>
+                <div style="font-size:0.85rem;color:{color_80c}">₹{total_invested_80c:,.0f} / ₹1,50,000</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.1);border-radius:8px;height:12px;overflow:hidden">
+                <div style="width:{pct_80c:.1f}%;background:{color_80c};height:100%;border-radius:8px;transition:width 0.5s"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:0.4rem">
+                <div style="font-size:0.75rem;color:rgba(232,224,208,0.5)">{pct_80c:.1f}% used</div>
+                <div style="font-size:0.75rem;color:{color_80c}">₹{remaining_80c:,.0f} remaining — invest to save tax!</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Tax saving alert
+        annual_income = st.session_state.get('monthly_income', 0) * 12
+        if annual_income > 250000 and remaining_80c > 0:
+            from utils.financial_advisor import calculate_indian_tax
+            tax_without = calculate_indian_tax(max(0, annual_income - total_invested_80c), "old")
+            tax_with_full = calculate_indian_tax(max(0, annual_income - annual_limit_80c), "old")
+            potential_saving = tax_without - tax_with_full
+            if potential_saving > 0:
+                st.markdown(f'<div class="alert-info">💡 <b>Tax Tip:</b> Invest ₹{remaining_80c:,.0f} more in ELSS/PPF to potentially save ₹{potential_saving:,.0f} in taxes this year!</div>', unsafe_allow_html=True)
+
     col_left, col_right = st.columns([1.2, 1])
 
     with col_left:
@@ -967,6 +1002,46 @@ elif page == "🤖 AI Advisor":
 
             # Tax saving section
             st.markdown('<div class="section-header" style="margin-top:1.5rem">TAX SAVING TIPS</div>', unsafe_allow_html=True)
+
+            # Income slab info
+            annual_inc = income * 12
+            if annual_inc <= 300000:
+                slab_msg = "✅ Your income is below ₹3L — No tax under new regime!"
+                slab_color = "#4ade80"
+            elif annual_inc <= 700000:
+                slab_msg = f"ℹ️ Annual income ₹{annual_inc/100000:.1f}L — eligible for full tax rebate under new regime (Sec 87A)"
+                slab_color = "#facc15"
+            elif annual_inc <= 1000000:
+                slab_msg = f"⚠️ Annual income ₹{annual_inc/100000:.1f}L — invest in 80C instruments to reduce tax!"
+                slab_color = "#fb923c"
+            else:
+                slab_msg = f"🚨 Annual income ₹{annual_inc/100000:.1f}L — maximize ALL deductions (80C + 80D + NPS + HRA)"
+                slab_color = "#f87171"
+
+            st.markdown(f'<div class="alert-info" style="border-color:{slab_color}"><b>Your Tax Slab:</b> {slab_msg}</div>', unsafe_allow_html=True)
+
+            # 80C progress in advisor
+            all_exp = get_expenses(limit=500)
+            if not all_exp.empty:
+                inv_exp = all_exp[all_exp['category'] == 'Investment & Savings']
+                invested_80c = inv_exp['amount'].sum() if not inv_exp.empty else 0
+                remaining = max(150000 - invested_80c, 0)
+                pct = min((invested_80c / 150000) * 100, 100)
+                bar_color = "#4ade80" if pct >= 80 else "#facc15" if pct >= 40 else "#f87171"
+                st.markdown(f"""
+                <div class="advice-card" style="margin:0.5rem 0">
+                    <div style="font-size:0.85rem;color:rgba(232,224,208,0.7);margin-bottom:0.4rem">
+                        <b>80C Progress:</b> ₹{invested_80c:,.0f} used of ₹1,50,000 limit
+                    </div>
+                    <div style="background:rgba(255,255,255,0.1);border-radius:6px;height:10px;overflow:hidden">
+                        <div style="width:{pct:.1f}%;background:{bar_color};height:100%;border-radius:6px"></div>
+                    </div>
+                    <div style="font-size:0.75rem;color:{bar_color};margin-top:0.3rem">
+                        ₹{remaining:,.0f} more to invest for maximum 80C benefit
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
             for section, details in INDIAN_FINANCIAL_ADVICE['Tax Saving'].items():
                 st.markdown(f'<div class="alert-info"><strong>{section}:</strong> {details}</div>', unsafe_allow_html=True)
 
