@@ -805,12 +805,75 @@ elif page == "📊 Analytics":
                 </div>
                 """, unsafe_allow_html=True)
 
+        # ── UPI Analysis ──
+        st.markdown('<div class="section-header">UPI TRANSACTION ANALYSIS</div>', unsafe_allow_html=True)
+
+        if not all_expenses.empty:
+            upi_apps = {
+                'phonepe': 'PhonePe',
+                'gpay': 'Google Pay',
+                'google pay': 'Google Pay',
+                'paytm': 'Paytm',
+                'bhim': 'BHIM UPI',
+                'amazon pay': 'Amazon Pay',
+                'cred': 'CRED',
+                'mobikwik': 'MobiKwik',
+                'freecharge': 'FreeCharge',
+                'airtel money': 'Airtel Money',
+                'jiomoney': 'JioMoney',
+                'navi': 'Navi',
+                'slice': 'Slice',
+            }
+            upi_counts = {}
+            upi_amounts = {}
+            for _, row in all_expenses.iterrows():
+                desc_lower = str(row.get('description', '')).lower()
+                source = str(row.get('source', '')).lower()
+                matched = False
+                for app_key, app_name in upi_apps.items():
+                    if app_key in desc_lower or app_key in source:
+                        upi_counts[app_name] = upi_counts.get(app_name, 0) + 1
+                        upi_amounts[app_name] = upi_amounts.get(app_name, 0) + row['amount']
+                        matched = True
+                        break
+                if not matched and row.get('source') == 'screenshot':
+                    upi_amounts['Other UPI'] = upi_amounts.get('Other UPI', 0) + row['amount']
+                    upi_counts['Other UPI'] = upi_counts.get('Other UPI', 0) + 1
+
+            col_u1, col_u2 = st.columns(2)
+            with col_u1:
+                if upi_amounts:
+                    st.markdown("**Spending by UPI App**")
+                    upi_df = pd.DataFrame({'App': list(upi_amounts.keys()), 'Amount': list(upi_amounts.values())})
+                    fig_upi = px.pie(upi_df, values='Amount', names='App', hole=0.4,
+                        color_discrete_sequence=['#c4a050','#4ade80','#60a5fa','#f87171','#a78bfa','#fb923c','#34d399','#f472b6','#facc15'])
+                    fig_upi.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                        font=dict(color='#e8e0d0'), margin=dict(t=20,b=20,l=20,r=20))
+                    st.plotly_chart(fig_upi, use_container_width=True)
+                else:
+                    st.info("No UPI transactions detected yet. Upload PhonePe, GPay or Paytm screenshots!")
+
+            with col_u2:
+                st.markdown("**UPI App Summary**")
+                if upi_amounts:
+                    total_upi = sum(upi_amounts.values())
+                    for app, amount in sorted(upi_amounts.items(), key=lambda x: x[1], reverse=True):
+                        count = upi_counts.get(app, 0)
+                        pct = (amount / total_upi * 100) if total_upi > 0 else 0
+                        bar = f'<div style="background:rgba(255,255,255,0.1);border-radius:4px;height:6px;margin-top:0.4rem;overflow:hidden"><div style="width:{pct:.1f}%;background:#c4a050;height:100%;border-radius:4px"></div></div>'
+                        st.markdown(f'<div class="advice-card" style="padding:0.8rem;margin-bottom:0.5rem"><div style="display:flex;justify-content:space-between"><b style="color:#c4a050">{app}</b><span style="color:#4ade80">Rs.{amount:,.0f}</span></div><div style="display:flex;justify-content:space-between;margin-top:0.3rem"><small style="color:rgba(232,224,208,0.5)">{count} transactions</small><small style="color:rgba(232,224,208,0.5)">{pct:.1f}%</small></div>{bar}</div>', unsafe_allow_html=True)
+                    top_app = max(upi_amounts, key=upi_amounts.get)
+                    st.markdown(f'<div class="alert-info">Most used: <b>{top_app}</b> - Rs.{upi_amounts[top_app]:,.0f}</div>', unsafe_allow_html=True)
+                else:
+                    st.info("Upload UPI screenshots to see app-wise breakdown!")
+
         # ── Transaction Table ──
         st.markdown('<div class="section-header">TRANSACTION DETAILS</div>', unsafe_allow_html=True)
         if not all_expenses.empty:
-            display_df = all_expenses[['date', 'amount', 'category', 'description']].copy()
-            display_df['amount'] = display_df['amount'].apply(lambda x: f"₹{x:,.2f}")
-            display_df.columns = ['Date', 'Amount', 'Category', 'Description']
+            display_df = all_expenses[['date', 'amount', 'category', 'description', 'source']].copy()
+            display_df['amount'] = display_df['amount'].apply(lambda x: f"Rs.{x:,.2f}")
+            display_df['source'] = display_df['source'].apply(lambda x: 'Screenshot' if x == 'screenshot' else 'Manual' if x == 'manual' else 'CSV' if x == 'csv_import' else 'Splitwise' if x == 'splitwise' else 'SMS' if x == 'sms' else x)
+            display_df.columns = ['Date', 'Amount', 'Category', 'Description', 'Source']
             st.dataframe(display_df, use_container_width=True, hide_index=True)
 
 
