@@ -867,14 +867,95 @@ elif page == "📊 Analytics":
                 else:
                     st.info("Upload UPI screenshots to see app-wise breakdown!")
 
-        # ── Transaction Table ──
+        # ── Transaction Table + Export ──
         st.markdown('<div class="section-header">TRANSACTION DETAILS</div>', unsafe_allow_html=True)
         if not all_expenses.empty:
             display_df = all_expenses[['date', 'amount', 'category', 'description', 'source']].copy()
-            display_df['amount'] = display_df['amount'].apply(lambda x: f"Rs.{x:,.2f}")
             display_df['source'] = display_df['source'].apply(lambda x: 'Screenshot' if x == 'screenshot' else 'Manual' if x == 'manual' else 'CSV' if x == 'csv_import' else 'Splitwise' if x == 'splitwise' else 'SMS' if x == 'sms' else x)
             display_df.columns = ['Date', 'Amount', 'Category', 'Description', 'Source']
+
+            # ── Export Buttons ──
+            st.markdown("**📥 Export Your Data**")
+            col_e1, col_e2, col_e3 = st.columns(3)
+
+            with col_e1:
+                # CSV Export
+                csv_data = display_df.to_csv(index=False)
+                st.download_button(
+                    label="📄 Download CSV",
+                    data=csv_data,
+                    file_name=f"custos_expenses_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+
+            with col_e2:
+                # Monthly Summary CSV
+                summary_df = all_expenses.groupby(['category'])['amount'].agg(['sum', 'count']).reset_index()
+                summary_df.columns = ['Category', 'Total Amount', 'Transactions']
+                summary_df['Average'] = (summary_df['Total Amount'] / summary_df['Transactions']).round(2)
+                summary_csv = summary_df.to_csv(index=False)
+                st.download_button(
+                    label="📊 Category Summary CSV",
+                    data=summary_csv,
+                    file_name=f"custos_summary_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+
+            with col_e3:
+                # Text Report
+                income = st.session_state.get('monthly_income', 0)
+                total_spent = all_expenses['amount'].sum()
+                savings = income - all_expenses[all_expenses['date'].str.startswith(str(datetime.now().year) + '-' + str(datetime.now().month).zfill(2))]['amount'].sum() if income > 0 else 0
+
+                report_lines = [
+                    "CUSTOS — FINANCIAL REPORT",
+                    "=" * 40,
+                    f"Generated: {datetime.now().strftime('%d %b %Y')}",
+                    f"Monthly Income: Rs.{income:,.0f}",
+                    "",
+                    "SPENDING SUMMARY",
+                    "-" * 40,
+                    f"Total Spent: Rs.{total_spent:,.2f}",
+                    f"Total Transactions: {len(all_expenses)}",
+                    f"Average Transaction: Rs.{total_spent/len(all_expenses):,.2f}",
+                    "",
+                    "BY CATEGORY",
+                    "-" * 40,
+                ]
+                for _, row in summary_df.iterrows():
+                    report_lines.append(f"{row['Category']}: Rs.{row['Total Amount']:,.2f} ({row['Transactions']} txns)")
+
+                report_lines += [
+                    "",
+                    "TOP 10 TRANSACTIONS",
+                    "-" * 40,
+                ]
+                top10 = all_expenses.nlargest(10, 'amount')[['date', 'amount', 'category', 'description']]
+                for _, row in top10.iterrows():
+                    report_lines.append(f"{row['date']} | Rs.{row['amount']:,.2f} | {row['category']} | {row['description']}")
+
+                report_lines += [
+                    "",
+                    "=" * 40,
+                    "Disclaimer: This is not financial advice.",
+                    "Consult a certified financial advisor for major decisions.",
+                ]
+                report_text = "\n".join(report_lines)
+                st.download_button(
+                    label="📋 Download Report",
+                    data=report_text,
+                    file_name=f"custos_report_{datetime.now().strftime('%Y%m%d')}.txt",
+                    mime="text/plain",
+                    use_container_width=True
+                )
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            display_df['Amount'] = display_df['Amount'].apply(lambda x: f"Rs.{float(str(x).replace('Rs.','').replace(',','')):,.2f}" if isinstance(x, (int, float)) else x)
             st.dataframe(display_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("No transactions yet. Add some expenses to export!")
 
 
 elif page == "🤖 AI Advisor":
