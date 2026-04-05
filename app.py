@@ -972,7 +972,8 @@ elif page == "📊 Analytics":
                 # Text Report
                 income = st.session_state.get('monthly_income', 0)
                 total_spent = all_expenses['amount'].sum()
-                savings = income - all_expenses[all_expenses['date'].str.startswith(str(datetime.now().year) + '-' + str(datetime.now().month).zfill(2))]['amount'].sum() if income > 0 else 0
+                month_prefix = str(datetime.now().year) + '-' + str(datetime.now().month).zfill(2)
+                savings = income - all_expenses[all_expenses['date'].astype(str).str.startswith(month_prefix)]['amount'].sum() if income > 0 else 0
 
                 report_lines = [
                     "CUSTOS — FINANCIAL REPORT",
