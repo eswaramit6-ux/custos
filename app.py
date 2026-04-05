@@ -805,6 +805,71 @@ elif page == "📊 Analytics":
                 </div>
                 """, unsafe_allow_html=True)
 
+        # ── Indian Spending Pattern Visualization ──
+        st.markdown('<div class="section-header">INDIAN SPENDING PATTERN ANALYSIS</div>', unsafe_allow_html=True)
+        st.markdown("How your spending compares to recommended Indian lifestyle benchmarks:")
+
+        from utils.ocr_extractor import get_indian_spending_insights
+        insights = get_indian_spending_insights(cat_totals, income)
+
+        if insights:
+            # Build comparison chart
+            benchmark_data = []
+            for ins in insights:
+                benchmark_data.append({
+                    'Category': ins['category'],
+                    'Your Spending %': round(ins['percent'], 1),
+                    'Recommended %': ins['limit'],
+                    'Status': '⚠️ Over' if ins['status'] == 'over' else '✅ OK'
+                })
+
+            if benchmark_data:
+                bench_df = pd.DataFrame(benchmark_data)
+
+                # Bar chart comparing actual vs recommended
+                fig_bench = go.Figure()
+                fig_bench.add_trace(go.Bar(
+                    name='Your Spending %',
+                    x=bench_df['Category'],
+                    y=bench_df['Your Spending %'],
+                    marker_color=['#f87171' if s == '⚠️ Over' else '#4ade80' for s in bench_df['Status']],
+                ))
+                fig_bench.add_trace(go.Bar(
+                    name='Recommended %',
+                    x=bench_df['Category'],
+                    y=bench_df['Recommended %'],
+                    marker_color='rgba(196,160,80,0.4)',
+                ))
+                fig_bench.update_layout(
+                    barmode='group',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='#e8e0d0', family='Raleway'),
+                    xaxis=dict(gridcolor='rgba(196,160,80,0.1)', tickangle=-30),
+                    yaxis=dict(gridcolor='rgba(196,160,80,0.1)', title='% of Income'),
+                    legend=dict(bgcolor='rgba(0,0,0,0)'),
+                    margin=dict(t=20, b=20),
+                )
+                st.plotly_chart(fig_bench, use_container_width=True)
+
+                # Tips for over-budget categories
+                over_budget = [i for i in insights if i['status'] == 'over']
+                ok_budget = [i for i in insights if i['status'] == 'ok']
+
+                col_ib1, col_ib2 = st.columns(2)
+                with col_ib1:
+                    if over_budget:
+                        st.markdown("**⚠️ Needs Attention:**")
+                        for ins in over_budget:
+                            st.markdown(f'<div class="alert-danger"><b>{ins["category"]}</b>: {ins["percent"]:.1f}% of income (limit: {ins["limit"]}%)<br><small>{ins["tip"]}</small></div>', unsafe_allow_html=True)
+                with col_ib2:
+                    if ok_budget:
+                        st.markdown("**✅ Well Managed:**")
+                        for ins in ok_budget[:4]:
+                            st.markdown(f'<div class="alert-success"><b>{ins["category"]}</b>: {ins["percent"]:.1f}% — within {ins["limit"]}% limit</div>', unsafe_allow_html=True)
+        else:
+            st.info("Add more expenses to see your Indian spending pattern analysis!")
+
         # ── UPI Analysis ──
         st.markdown('<div class="section-header">UPI TRANSACTION ANALYSIS</div>', unsafe_allow_html=True)
 
