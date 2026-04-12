@@ -480,11 +480,25 @@ elif page == "📸 Add Expense":
                 with st.spinner("🔍 Reading screenshot with Tesseract OCR..."):
                     result = extract_expense_from_image(image)
 
-                if result.get('raw_text'):
-                    with st.expander("📄 Extracted Text"):
-                        st.text(result.get('raw_text', ''))
+                # ── OCR Error Handling ──
+                raw_text = result.get('raw_text', '')
 
-                st.success("✅ Review and confirm details:")
+                if 'Error:' in raw_text:
+                    if 'tesseract is not installed' in raw_text.lower() or 'not in your path' in raw_text.lower():
+                        st.error("⚠️ Tesseract OCR is not installed or not found. Please install Tesseract and restart the app.")
+                        st.info("💡 Install guide: https://github.com/UB-Mannheim/tesseract/wiki")
+                    else:
+                        st.error(f"⚠️ OCR Error: {raw_text}. Please try a clearer image.")
+                elif raw_text == 'No text found':
+                    st.warning("⚠️ No text could be extracted. Please try a clearer, higher resolution screenshot.")
+                else:
+                    if raw_text:
+                        with st.expander("📄 Extracted Text"):
+                            st.text(raw_text)
+                    if result.get('amount', 0) == 0.0:
+                        st.warning("⚠️ Amount could not be read automatically — please enter it manually below.")
+                    else:
+                        st.success("✅ Review and confirm details:")
                 with st.form("confirm_screenshot_expense"):
                     amount = st.number_input("Amount (₹) *", value=float(result.get('amount', 0.0)), min_value=0.0, step=10.0)
                     exp_date = st.date_input("Date", value=date.today())
