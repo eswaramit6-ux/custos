@@ -493,10 +493,20 @@ elif page == "📸 Add Expense":
                         index=CATEGORIES.index(result.get('category', 'Others')) if result.get('category') in CATEGORIES else 0)
 
                     if st.form_submit_button("💾 Save Expense", use_container_width=True):
-                        if amount <= 0 or not description:
-                            st.error("Please fill in amount and description!")
+                        errors = []
+                        if amount <= 0:
+                            errors.append("❌ Amount must be greater than ₹0 — OCR may have failed to read it. Please enter manually.")
+                        if amount > 10000000:
+                            errors.append("❌ Amount seems too high. Please check the value.")
+                        if not description.strip():
+                            errors.append("❌ Description cannot be empty")
+                        if exp_date > date.today():
+                            errors.append("❌ Date cannot be in the future")
+                        if errors:
+                            for err in errors:
+                                st.error(err)
                         else:
-                            add_expense(str(exp_date), amount, category, description, source='screenshot')
+                            add_expense(str(exp_date), amount, category, description.strip(), source='screenshot')
                             st.success(f"✅ ₹{amount:,.0f} saved under {category}!")
                             st.balloons()
 
@@ -547,10 +557,24 @@ elif page == "📸 Add Expense":
         manual_category = st.selectbox("Category", CATEGORIES, index=cat_index, key="manual_cat")
 
         if st.button("➕ Add Expense", use_container_width=True, key="manual_submit"):
-            if manual_amount <= 0 or not manual_desc:
-                st.error("Please fill in all required fields!")
+            # Input Validation
+            errors = []
+            if manual_amount <= 0:
+                errors.append("❌ Amount must be greater than ₹0")
+            if manual_amount > 10000000:
+                errors.append("❌ Amount seems too high. Please check the value.")
+            if not manual_desc.strip():
+                errors.append("❌ Description cannot be empty")
+            if len(manual_desc.strip()) < 2:
+                errors.append("❌ Description is too short — please be more descriptive")
+            if manual_date > date.today():
+                errors.append("❌ Date cannot be in the future")
+
+            if errors:
+                for err in errors:
+                    st.error(err)
             else:
-                add_expense(str(manual_date), manual_amount, manual_category, manual_desc, source='manual')
+                add_expense(str(manual_date), manual_amount, manual_category, manual_desc.strip(), source='manual')
                 st.success(f"✅ ₹{manual_amount:,.0f} added under **{manual_category}**!")
 
                 # ── Auto Analysis After Adding Expense ──
@@ -1266,11 +1290,21 @@ elif page == "🎯 Goals & Budget":
                 target = st.number_input("Target Amount (₹)", min_value=0.0, step=500.0)
                 deadline = st.date_input("Target Date", value=date.today())
                 if st.form_submit_button("➕ Add Goal", use_container_width=True):
-                    if goal_name and target > 0:
-                        add_goal(goal_name, target, str(deadline))
-                        st.success(f"✅ Goal '{goal_name}' added!")
+                    errors = []
+                    if not goal_name.strip():
+                        errors.append("❌ Goal name cannot be empty")
+                    if target <= 0:
+                        errors.append("❌ Target amount must be greater than ₹0")
+                    if target > 100000000:
+                        errors.append("❌ Target amount seems too high. Please check.")
+                    if deadline < date.today():
+                        errors.append("❌ Target date cannot be in the past")
+                    if errors:
+                        for err in errors:
+                            st.error(err)
                     else:
-                        st.error("Please fill in all fields!")
+                        add_goal(goal_name.strip(), target, str(deadline))
+                        st.success(f"✅ Goal '{goal_name}' added!")
 
         with col2:
             st.markdown("**Your Financial Goals**")
@@ -1294,7 +1328,15 @@ elif page == "🎯 Goals & Budget":
                 cat = st.selectbox("Category", CATEGORIES)
                 limit = st.number_input("Monthly Limit (₹)", min_value=0.0, step=500.0)
                 if st.form_submit_button("💾 Set Budget", use_container_width=True):
-                    if limit > 0:
+                    errors = []
+                    if limit <= 0:
+                        errors.append("❌ Budget limit must be greater than ₹0")
+                    if limit > 10000000:
+                        errors.append("❌ Budget limit seems too high. Please check.")
+                    if errors:
+                        for err in errors:
+                            st.error(err)
+                    else:
                         set_budget(cat, limit)
                         st.success(f"✅ Budget set for {cat}!")
 
