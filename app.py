@@ -973,6 +973,29 @@ elif page == "📊 Analytics":
         # ── Transaction Table + Export ──
         st.markdown('<div class="section-header">TRANSACTION DETAILS</div>', unsafe_allow_html=True)
         if not all_expenses.empty:
+            # ── Delete Expense ──
+            col_del1, col_del2 = st.columns([3, 1])
+            with col_del1:
+                expense_options = {
+                    f"#{row['id']} | {row['date']} | ₹{row['amount']:,.0f} | {row['category']} | {row['description'][:30]}": row['id']
+                    for _, row in all_expenses.iterrows()
+                }
+                selected_expense = st.selectbox(
+                    "🗑️ Select expense to delete",
+                    options=["-- Select to delete --"] + list(expense_options.keys()),
+                    key="delete_select"
+                )
+            with col_del2:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("🗑️ Delete", use_container_width=True, key="delete_btn"):
+                    if selected_expense != "-- Select to delete --":
+                        expense_id = expense_options[selected_expense]
+                        delete_expense(expense_id)
+                        st.success("✅ Expense deleted!")
+                        st.rerun()
+                    else:
+                        st.warning("Please select an expense to delete!")
+
             display_df = all_expenses[['date', 'amount', 'category', 'description', 'source']].copy()
             display_df['source'] = display_df['source'].apply(lambda x: 'Screenshot' if x == 'screenshot' else 'Manual' if x == 'manual' else 'CSV' if x == 'csv_import' else 'Splitwise' if x == 'splitwise' else 'SMS' if x == 'sms' else x)
             display_df.columns = ['Date', 'Amount', 'Category', 'Description', 'Source']
