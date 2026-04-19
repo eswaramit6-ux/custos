@@ -14,6 +14,8 @@ CUSTOS is an AI-powered financial advisor and expense manager built specifically
 
 **Live Demo:** https://custos-vptrmp3eekpsfpnh6mdmdd.streamlit.app/
 
+**Demo Video:** https://drive.google.com/file/d/1haOSCWT-utuc1d-z_mrbCDGElpqxP6ll/view?usp=sharing
+
 **GitHub:** https://github.com/eswaramit6-ux/custos
 
 ---
