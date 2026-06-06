@@ -303,6 +303,7 @@ with st.sidebar:
         "",
         ["🏠 Dashboard", "📸 Add Expense", "📊 Analytics", "🤖 AI Advisor", "🎯 Goals & Budget",
     "📚 Book Advisor",
+    "📰 Financial News",
     "🤝 Splitwise"],
         label_visibility="collapsed"
     )
@@ -1030,7 +1031,69 @@ elif page == "📊 Analytics":
                 )
 
             with col_e3:
-                # Text Report
+                # Word Document Report using python-docx
+                try:
+                    from docx import Document
+                    from docx.shared import Pt, RGBColor
+                    from docx.enum.text import WD_ALIGN_PARAGRAPH
+                    import io
+
+                    doc = Document()
+                    doc.add_heading('CUSTOS — Financial Report', 0)
+                    doc.add_paragraph(f'Generated: {datetime.now().strftime("%d %b %Y")}')
+                    doc.add_paragraph(f'Monthly Income: Rs.{st.session_state.get("monthly_income", 0):,.0f}')
+
+                    doc.add_heading('Spending Summary', level=1)
+                    total_spent_doc = all_expenses['amount'].sum()
+                    doc.add_paragraph(f'Total Spent: Rs.{total_spent_doc:,.2f}')
+                    doc.add_paragraph(f'Total Transactions: {len(all_expenses)}')
+
+                    doc.add_heading('Spending by Category', level=1)
+                    summary_doc = all_expenses.groupby('category')['amount'].sum().reset_index()
+                    table = doc.add_table(rows=1, cols=2)
+                    table.style = 'Table Grid'
+                    hdr = table.rows[0].cells
+                    hdr[0].text = 'Category'
+                    hdr[1].text = 'Amount (Rs.)'
+                    for _, row in summary_doc.iterrows():
+                        cells = table.add_row().cells
+                        cells[0].text = str(row['category'])
+                        cells[1].text = f"Rs.{row['amount']:,.2f}"
+
+                    doc.add_heading('Top 10 Transactions', level=1)
+                    top10_doc = all_expenses.nlargest(10, 'amount')[['date','amount','category','description']]
+                    table2 = doc.add_table(rows=1, cols=4)
+                    table2.style = 'Table Grid'
+                    hdrs = table2.rows[0].cells
+                    hdrs[0].text = 'Date'
+                    hdrs[1].text = 'Amount'
+                    hdrs[2].text = 'Category'
+                    hdrs[3].text = 'Description'
+                    for _, row in top10_doc.iterrows():
+                        cells = table2.add_row().cells
+                        cells[0].text = str(row['date'])
+                        cells[1].text = f"Rs.{row['amount']:,.2f}"
+                        cells[2].text = str(row['category'])
+                        cells[3].text = str(row['description'])[:30]
+
+                    doc.add_paragraph('\nDisclaimer: This is not financial advice. Consult a certified financial advisor for major decisions.')
+
+                    buf = io.BytesIO()
+                    doc.save(buf)
+                    buf.seek(0)
+                    st.download_button(
+                        label="📝 Download Word Report",
+                        data=buf.getvalue(),
+                        file_name=f"custos_report_{datetime.now().strftime('%Y%m%d')}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True
+                    )
+                except ImportError:
+                    st.info("Install python-docx for Word reports")
+
+            col_e4 = st.columns(1)[0]
+            with col_e4:
+                # Text Report fallback
                 income = st.session_state.get('monthly_income', 0)
                 total_spent = all_expenses['amount'].sum()
                 month_prefix = str(datetime.now().year) + '-' + str(datetime.now().month).zfill(2)
@@ -1488,6 +1551,96 @@ elif page == "📚 Book Advisor":
 
 
 # ═══ SPLITWISE PAGE ════════════════════════════════════════════
+elif page == "📰 Financial News":
+    st.markdown('<div class="section-header">INDIAN FINANCIAL NEWS & TIPS</div>', unsafe_allow_html=True)
+    st.markdown("Live financial news and tips scraped from trusted Indian finance sources.")
+
+    import requests
+    from bs4 import BeautifulSoup
+
+    news_sources = {
+        "Moneycontrol": "https://www.moneycontrol.com/news/business/personal-finance/",
+        "Economic Times": "https://economictimes.indiatimes.com/wealth",
+        "Livemint": "https://www.livemint.com/money",
+    }
+
+    selected_source = st.selectbox("Select News Source", list(news_sources.keys()))
+
+    if st.button("📰 Fetch Latest News", use_container_width=True):
+        with st.spinner(f"Fetching news from {selected_source}..."):
+            try:
+                url = news_sources[selected_source]
+                headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+                response = requests.get(url, headers=headers, timeout=10)
+
+                if response.status_code == 200:
+                    soup = BeautifulSoup(response.content, 'html.parser')
+
+                    articles = []
+                    # Try multiple common selectors
+                    for selector in ['h2 a', 'h3 a', '.news-title a', '.article-title a', 'article h2 a']:
+                        found = soup.select(selector)
+                        if found:
+                            for item in found[:10]:
+                                title = item.get_text(strip=True)
+                                link = item.get('href', '')
+                                if title and len(title) > 20:
+                                    if not link.startswith('http'):
+                                        base = url.split('/')[0] + '//' + url.split('/')[2]
+                                        link = base + link
+                                    articles.append({'title': title, 'link': link})
+                            if articles:
+                                break
+
+                    if articles:
+                        st.success(f"✅ Found {len(articles)} articles from {selected_source}")
+                        for i, article in enumerate(articles[:8], 1):
+                            st.markdown(f"""
+                            <div class="advice-card" style="margin-bottom:0.5rem;padding:0.8rem">
+                                <div style="color:#c4a050;font-weight:bold">{i}. {article['title']}</div>
+                                <div style="font-size:0.75rem;margin-top:0.3rem">
+                                    <a href="{article['link']}" target="_blank" style="color:#4ade80">Read more →</a>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    else:
+                        st.warning("Could not extract articles. The site may have changed its structure.")
+
+                else:
+                    st.error(f"Could not fetch news. Status code: {response.status_code}")
+
+            except requests.exceptions.Timeout:
+                st.error("Request timed out. Please try again.")
+            except requests.exceptions.ConnectionError:
+                st.error("Could not connect. Please check your internet connection.")
+            except Exception as e:
+                st.error(f"Error fetching news: {str(e)}")
+
+    # Static Indian Finance Tips (always shown)
+    st.markdown("---")
+    st.markdown("### 💡 Daily Indian Finance Tips")
+
+    tips = [
+        ("📈 SIP Power", "Investing ₹5,000/month in a Nifty 50 index fund for 20 years at 12% returns gives you ₹49.9 lakhs!"),
+        ("🏛️ PPF Reminder", "PPF interest rate is 7.1% tax-free. The last date to invest for this financial year is 31st March."),
+        ("💳 80C Limit", "You can save up to ₹46,800 in taxes by maxing out your ₹1.5L Section 80C limit through ELSS or PPF."),
+        ("🏥 Health Insurance", "Medical inflation in India is 14% annually. A ₹5L health cover today may only cover ₹1.3L worth of treatment in 10 years."),
+        ("📊 Emergency Fund", "Keep 6 months of expenses in a liquid mutual fund — it earns ~7% while remaining accessible within 1 business day."),
+        ("🥇 Gold Bonds", "Sovereign Gold Bonds give 2.5% annual interest PLUS gold price appreciation AND are tax-free on maturity!"),
+        ("💰 NPS Bonus", "NPS gives an EXTRA ₹50,000 deduction under 80CCD(1B) — completely separate from the ₹1.5L 80C limit."),
+        ("📱 UPI Cashback", "Use CRED for bill payments and HDFC/ICICI credit cards on GPay for cashback of 1-5% on transactions."),
+    ]
+
+    col_t1, col_t2 = st.columns(2)
+    for i, (title, tip) in enumerate(tips):
+        with col_t1 if i % 2 == 0 else col_t2:
+            st.markdown(f"""
+            <div class="advice-card" style="margin-bottom:0.8rem;padding:0.8rem">
+                <div style="color:#c4a050;font-weight:bold;margin-bottom:0.3rem">{title}</div>
+                <div style="font-size:0.85rem;color:rgba(232,224,208,0.8)">{tip}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
 elif page == "🤝 Splitwise":
     st.markdown('<div class="section-header">SPLITWISE GROUP EXPENSES</div>', unsafe_allow_html=True)
     st.markdown('<div class="alert-info">Import your group expenses from Splitwise and analyze your shared spending!</div>', unsafe_allow_html=True)
