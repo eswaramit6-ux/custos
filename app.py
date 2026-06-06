@@ -1,0 +1,1773 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from datetime import datetime, date
+from PIL import Image
+import sys
+import os
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from utils.database import (
+    init_db, add_expense, get_expenses, get_category_totals,
+    get_expenses_by_month, set_budget, get_budgets, add_goal, get_goals, delete_expense
+)
+from utils.ocr_extractor import (
+    extract_expense_from_image, categorize_text_expense,
+    parse_csv_bank_statement, CATEGORIES
+)
+from utils.pdf_advisor import extract_text_from_pdf, generate_book_based_advice
+from utils.splitwise_integration import get_splitwise_expenses, get_splitwise_user, get_splitwise_groups, parse_splitwise_expenses, analyze_splitwise_spending
+from utils.financial_advisor import (
+    generate_rule_based_advice, analyze_spending_health,
+    get_savings_rate_advice, calculate_financial_health_score,
+    FINANCIAL_GURUS, INDIAN_FINANCIAL_ADVICE,
+    get_80c_recommendations, get_tax_saving_summary,
+    get_indian_investment_plan, calculate_sip_returns
+)
+
+# ─── PAGE CONFIG ────────────────────────────────────────────────────────────────
+st.set_page_config(
+    page_title="Custos — Your Financial Guardian",
+    page_icon="🛡️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# ─── CUSTOM CSS ─────────────────────────────────────────────────────────────────
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Raleway:wght@300;400;500;600&display=swap');
+
+/* Base */
+html, body, [class*="css"] {
+    font-family: 'Raleway', sans-serif;
+    background-color: #0a0e1a;
+    color: #e8e0d0;
+}
+
+.stApp {
+    background: linear-gradient(135deg, #0a0e1a 0%, #0f1628 50%, #0a0e1a 100%);
+}
+
+/* Hide default streamlit elements */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+
+/* Hero Header */
+.custos-header {
+    background: linear-gradient(135deg, #0f1628 0%, #1a2444 50%, #0f1628 100%);
+    border: 1px solid rgba(196, 160, 80, 0.3);
+    border-radius: 16px;
+    padding: 2rem 2.5rem;
+    margin-bottom: 2rem;
+    position: relative;
+    overflow: hidden;
+}
+.custos-header::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: radial-gradient(ellipse at 20% 50%, rgba(196,160,80,0.08) 0%, transparent 60%);
+}
+.custos-title {
+    font-family: 'Cinzel', serif;
+    font-size: 2.8rem;
+    font-weight: 700;
+    color: #c4a050;
+    letter-spacing: 4px;
+    margin: 0;
+    text-shadow: 0 0 40px rgba(196,160,80,0.3);
+}
+.custos-subtitle {
+    font-family: 'Raleway', sans-serif;
+    font-size: 0.95rem;
+    color: rgba(232,224,208,0.6);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-top: 0.3rem;
+}
+
+/* Metric Cards */
+.metric-card {
+    background: linear-gradient(135deg, #111827 0%, #1a2444 100%);
+    border: 1px solid rgba(196, 160, 80, 0.2);
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+.metric-card:hover {
+    border-color: rgba(196, 160, 80, 0.5);
+    transform: translateY(-2px);
+}
+.metric-value {
+    font-family: 'Cinzel', serif;
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: #c4a050;
+}
+.metric-label {
+    font-size: 0.8rem;
+    color: rgba(232,224,208,0.5);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-top: 0.3rem;
+}
+
+/* Section Headers */
+.section-header {
+    font-family: 'Cinzel', serif;
+    font-size: 1.2rem;
+    color: #c4a050;
+    letter-spacing: 2px;
+    border-bottom: 1px solid rgba(196,160,80,0.2);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+/* Alert Boxes */
+.alert-danger {
+    background: rgba(220, 53, 69, 0.1);
+    border: 1px solid rgba(220,53,69,0.4);
+    border-radius: 8px;
+    padding: 0.8rem 1rem;
+    margin: 0.5rem 0;
+}
+.alert-success {
+    background: rgba(40, 167, 69, 0.1);
+    border: 1px solid rgba(40,167,69,0.4);
+    border-radius: 8px;
+    padding: 0.8rem 1rem;
+    margin: 0.5rem 0;
+}
+.alert-info {
+    background: rgba(196, 160, 80, 0.08);
+    border: 1px solid rgba(196,160,80,0.3);
+    border-radius: 8px;
+    padding: 0.8rem 1rem;
+    margin: 0.5rem 0;
+}
+
+/* Advice Card */
+.advice-card {
+    background: linear-gradient(135deg, #111827 0%, #1a2444 100%);
+    border: 1px solid rgba(196, 160, 80, 0.25);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-top: 1rem;
+    font-family: 'Raleway', sans-serif;
+    line-height: 1.7;
+}
+
+/* Sidebar */
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #0a0e1a 0%, #0f1628 100%);
+    border-right: 1px solid rgba(196,160,80,0.15);
+}
+
+/* Buttons */
+.stButton > button {
+    background: linear-gradient(135deg, #c4a050 0%, #a08040 100%);
+    color: #0a0e1a;
+    font-family: 'Raleway', sans-serif;
+    font-weight: 600;
+    font-size: 0.9rem;
+    letter-spacing: 1px;
+    border: none;
+    border-radius: 8px;
+    padding: 0.6rem 1.5rem;
+    transition: all 0.3s ease;
+}
+.stButton > button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(196,160,80,0.3);
+}
+
+/* Inputs */
+.stTextInput > div > div > input,
+.stNumberInput > div > div > input,
+.stSelectbox > div > div,
+.stDateInput > div > div > input {
+    background: #111827 !important;
+    border: 1px solid rgba(196,160,80,0.2) !important;
+    border-radius: 8px !important;
+    color: #e8e0d0 !important;
+}
+
+/* Dataframe */
+.stDataFrame {
+    border: 1px solid rgba(196,160,80,0.2);
+    border-radius: 8px;
+}
+
+/* Plotly charts background */
+.js-plotly-plot {
+    border-radius: 12px;
+}
+
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] {
+    background: transparent;
+    border-bottom: 1px solid rgba(196,160,80,0.2);
+    gap: 1rem;
+}
+.stTabs [data-baseweb="tab"] {
+    font-family: 'Raleway', sans-serif;
+    letter-spacing: 1px;
+    color: rgba(232,224,208,0.5);
+    background: transparent;
+}
+.stTabs [aria-selected="true"] {
+    color: #c4a050 !important;
+    border-bottom: 2px solid #c4a050 !important;
+}
+
+/* File uploader */
+.stFileUploader > div {
+    background: #111827;
+    border: 2px dashed rgba(196,160,80,0.3);
+    border-radius: 12px;
+}
+
+/* Success/Error messages */
+.stSuccess { background: rgba(40,167,69,0.1); border-radius: 8px; }
+.stError { background: rgba(220,53,69,0.1); border-radius: 8px; }
+.stWarning { background: rgba(255,193,7,0.1); border-radius: 8px; }
+
+/* FORCE SIDEBAR ALWAYS VISIBLE */
+[data-testid="stSidebar"] {
+    display: block !important;
+    visibility: visible !important;
+    width: 280px !important;
+    min-width: 280px !important;
+    transform: none !important;
+    position: relative !important;
+}
+[data-testid="collapsedControl"] {
+    display: none !important;
+    visibility: hidden !important;
+}
+section[data-testid="stSidebar"] > div {
+    width: 280px !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ─── INIT ───────────────────────────────────────────────────────────────────────
+init_db()
+
+# ─── SIDEBAR ────────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("""
+    <div style='text-align:center; padding: 1rem 0;'>
+        <div style='font-family: Cinzel, serif; font-size: 1.8rem; color: #c4a050; letter-spacing: 3px;'>🛡️ CUSTOS</div>
+        <div style='font-size: 0.7rem; color: rgba(232,224,208,0.4); letter-spacing: 3px; text-transform: uppercase;'>Financial Guardian</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.divider()
+
+    # API Key
+    st.markdown("#### 🔑 API Configuration")
+    api_key = st.text_input(
+        "Gemini API Key",
+        type="password",
+        placeholder="AIza...",
+        help="Your Gemini API key for AI-powered features"
+    )
+    if api_key:
+        st.session_state['api_key'] = api_key
+        st.success("API Key saved ✓")
+
+    st.divider()
+
+    # Monthly Income
+    st.markdown("#### 💰 Monthly Income")
+    monthly_income = st.number_input(
+        "Enter your monthly income (₹)",
+        min_value=0,
+        value=st.session_state.get('monthly_income', 50000),
+        step=1000,
+        format="%d"
+    )
+    st.session_state['monthly_income'] = monthly_income
+
+    st.divider()
+
+    # Navigation
+    st.markdown("#### 📍 Navigation")
+    page = st.radio(
+        "",
+        ["🏠 Dashboard", "📸 Add Expense", "📊 Analytics", "🤖 AI Advisor", "🎯 Goals & Budget",
+    "📚 Book Advisor",
+    "📰 Financial News",
+    "🤝 Splitwise"],
+        label_visibility="collapsed"
+    )
+
+    st.divider()
+    st.markdown("""
+    <div style='font-size:0.7rem; color:rgba(232,224,208,0.3); text-align:center; padding: 0.5rem;'>
+        ⚠️ Not financial advice.<br>Consult a certified advisor for major decisions.
+    </div>
+    """, unsafe_allow_html=True)
+
+# ─── HEADER ─────────────────────────────────────────────────────────────────────
+st.markdown("""
+<div class="custos-header">
+    <div class="custos-title">CUSTOS</div>
+    <div class="custos-subtitle">Guardian of Your Wealth · AI-Powered Financial Intelligence</div>
+</div>
+""", unsafe_allow_html=True)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE: DASHBOARD
+# ═══════════════════════════════════════════════════════════════════════════════
+if page == "🏠 Dashboard":
+    now = datetime.now()
+    expenses_month = get_expenses_by_month(now.year, now.month)
+    expenses_all = get_expenses()
+    total_month = expenses_month['amount'].sum() if not expenses_month.empty else 0
+    total_all = expenses_all['amount'].sum() if not expenses_all.empty else 0
+    income = st.session_state.get('monthly_income', 0)
+    savings = income - total_month
+
+    # Metrics Row
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value">₹{total_month:,.0f}</div>
+            <div class="metric-label">This Month's Spend</div>
+        </div>""", unsafe_allow_html=True)
+    with col2:
+        savings_color = "#4ade80" if savings >= 0 else "#f87171"
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value" style="color:{savings_color}">₹{savings:,.0f}</div>
+            <div class="metric-label">Monthly Savings</div>
+        </div>""", unsafe_allow_html=True)
+    with col3:
+        num_tx = len(expenses_month) if not expenses_month.empty else 0
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value">{num_tx}</div>
+            <div class="metric-label">Transactions</div>
+        </div>""", unsafe_allow_html=True)
+    with col4:
+        save_rate = ((savings / income) * 100) if income > 0 else 0
+        rate_color = "#4ade80" if save_rate >= 20 else "#facc15" if save_rate >= 10 else "#f87171"
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value" style="color:{rate_color}">{save_rate:.1f}%</div>
+            <div class="metric-label">Savings Rate</div>
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── 80C Tax Saving Progress Tracker ──
+    investments = get_expenses(limit=500)
+    annual_limit_80c = 150000
+    if not investments.empty:
+        inv_expenses = investments[investments['category'] == 'Investment & Savings']
+        total_invested_80c = inv_expenses['amount'].sum() if not inv_expenses.empty else 0
+        pct_80c = min((total_invested_80c / annual_limit_80c) * 100, 100)
+        remaining_80c = max(annual_limit_80c - total_invested_80c, 0)
+        color_80c = "#4ade80" if pct_80c >= 80 else "#facc15" if pct_80c >= 40 else "#f87171"
+        st.markdown(f"""
+        <div class="metric-card" style="margin-bottom:1rem">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem">
+                <div style="font-size:0.85rem;color:rgba(232,224,208,0.7)">🎯 <b>Section 80C Tax Saving Progress</b></div>
+                <div style="font-size:0.85rem;color:{color_80c}">₹{total_invested_80c:,.0f} / ₹1,50,000</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.1);border-radius:8px;height:12px;overflow:hidden">
+                <div style="width:{pct_80c:.1f}%;background:{color_80c};height:100%;border-radius:8px;transition:width 0.5s"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:0.4rem">
+                <div style="font-size:0.75rem;color:rgba(232,224,208,0.5)">{pct_80c:.1f}% used</div>
+                <div style="font-size:0.75rem;color:{color_80c}">₹{remaining_80c:,.0f} remaining — invest to save tax!</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Tax saving alert
+        annual_income = st.session_state.get('monthly_income', 0) * 12
+        if annual_income > 250000 and remaining_80c > 0:
+            from utils.financial_advisor import calculate_indian_tax
+            tax_without = calculate_indian_tax(max(0, annual_income - total_invested_80c), "old")
+            tax_with_full = calculate_indian_tax(max(0, annual_income - annual_limit_80c), "old")
+            potential_saving = tax_without - tax_with_full
+            if potential_saving > 0:
+                st.markdown(f'<div class="alert-info">💡 <b>Tax Tip:</b> Invest ₹{remaining_80c:,.0f} more in ELSS/PPF to potentially save ₹{potential_saving:,.0f} in taxes this year!</div>', unsafe_allow_html=True)
+
+    col_left, col_right = st.columns([1.2, 1])
+
+    with col_left:
+        st.markdown('<div class="section-header">SPENDING BY CATEGORY</div>', unsafe_allow_html=True)
+        cat_totals = get_category_totals(now.year, now.month)
+        if not cat_totals.empty:
+            fig = px.pie(
+                cat_totals, values='total', names='category',
+                color_discrete_sequence=['#c4a050','#4ade80','#60a5fa','#f87171','#a78bfa','#fb923c','#34d399','#f472b6','#facc15','#38bdf8','#818cf8','#e879f9'],
+                hole=0.4
+            )
+            fig.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='#e8e0d0', family='Raleway'),
+                legend=dict(bgcolor='rgba(0,0,0,0)', font=dict(size=11)),
+                margin=dict(t=20, b=20, l=20, r=20),
+                showlegend=True
+            )
+            fig.update_traces(textinfo='percent', textfont_color='#0a0e1a')
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No expenses recorded this month. Add some to see insights!")
+
+    with col_right:
+        st.markdown('<div class="section-header">SAVINGS HEALTH</div>', unsafe_allow_html=True)
+        if income > 0:
+            advice = get_savings_rate_advice(total_month, income)
+            st.markdown(f'<div class="alert-info">{advice}</div>', unsafe_allow_html=True)
+
+        st.markdown('<div class="section-header" style="margin-top:1.5rem">RECENT TRANSACTIONS</div>', unsafe_allow_html=True)
+        if not expenses_all.empty:
+            recent = expenses_all.head(5)[['date', 'amount', 'category', 'description']]
+            recent['amount'] = recent['amount'].apply(lambda x: f"₹{x:,.0f}")
+            st.dataframe(
+                recent,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "date": "Date",
+                    "amount": "Amount",
+                    "category": "Category",
+                    "description": "Description"
+                }
+            )
+        else:
+            st.info("No transactions yet.")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE: ADD EXPENSE
+# ═══════════════════════════════════════════════════════════════════════════════
+elif page == "📸 Add Expense":
+    st.markdown('<div class="section-header">ADD NEW EXPENSE</div>', unsafe_allow_html=True)
+
+    tab1, tab2, tab3 = st.tabs(["📸 Upload Screenshot", "✏️ Manual Entry", "📄 Import CSV"])
+
+    # ── TAB 1: Screenshot Upload ──
+    with tab1:
+        st.markdown("Upload a payment screenshot — Tesseract OCR will automatically read it!")
+        st.markdown('<div class="alert-info">📸 Supports UPI, PhonePe, GPay, Paytm, bank receipts</div>', unsafe_allow_html=True)
+
+        uploaded_file = st.file_uploader(
+            "Drop your payment screenshot here",
+            type=['png', 'jpg', 'jpeg'],
+            label_visibility="collapsed"
+        )
+
+        if uploaded_file:
+            image = Image.open(uploaded_file)
+            col_img, col_result = st.columns(2)
+
+            with col_img:
+                st.image(image, caption="Uploaded Screenshot", use_container_width=True)
+
+            with col_result:
+                with st.spinner("🔍 Reading screenshot with Tesseract OCR..."):
+                    result = extract_expense_from_image(image)
+
+                # ── OCR Error Handling ──
+                raw_text = result.get('raw_text', '')
+
+                if 'Error:' in raw_text:
+                    if 'tesseract is not installed' in raw_text.lower() or 'not in your path' in raw_text.lower():
+                        st.error("⚠️ Tesseract OCR is not installed or not found. Please install Tesseract and restart the app.")
+                        st.info("💡 Install guide: https://github.com/UB-Mannheim/tesseract/wiki")
+                    else:
+                        st.error(f"⚠️ OCR Error: {raw_text}. Please try a clearer image.")
+                elif raw_text == 'No text found':
+                    st.warning("⚠️ No text could be extracted. Please try a clearer, higher resolution screenshot.")
+                else:
+                    if raw_text:
+                        with st.expander("📄 Extracted Text"):
+                            st.text(raw_text)
+                    if result.get('amount', 0) == 0.0:
+                        st.warning("⚠️ Amount could not be read automatically — please enter it manually below.")
+                    else:
+                        st.success("✅ Review and confirm details:")
+                with st.form("confirm_screenshot_expense"):
+                    amount = st.number_input("Amount (₹) *", value=float(result.get('amount', 0.0)), min_value=0.0, step=10.0)
+                    exp_date = st.date_input("Date", value=date.today())
+                    description = st.text_input("Description *", value=result.get('description', ''), placeholder="e.g. Zomato order, Uber ride...")
+                    category = st.selectbox("Category", CATEGORIES,
+                        index=CATEGORIES.index(result.get('category', 'Others')) if result.get('category') in CATEGORIES else 0)
+
+                    if st.form_submit_button("💾 Save Expense", use_container_width=True):
+                        errors = []
+                        if amount <= 0:
+                            errors.append("❌ Amount must be greater than ₹0 — OCR may have failed to read it. Please enter manually.")
+                        if amount > 10000000:
+                            errors.append("❌ Amount seems too high. Please check the value.")
+                        if not description.strip():
+                            errors.append("❌ Description cannot be empty")
+                        if exp_date > date.today():
+                            errors.append("❌ Date cannot be in the future")
+                        if errors:
+                            for err in errors:
+                                st.error(err)
+                        else:
+                            add_expense(str(exp_date), amount, category, description.strip(), source='screenshot')
+                            st.success(f"✅ ₹{amount:,.0f} saved under {category}!")
+                            st.balloons()
+
+        st.divider()
+        st.markdown("**📱 Or Paste Your UPI/Bank SMS Message**")
+        st.markdown('<div class="alert-info">Paste any bank SMS like: <em>"₹500 debited from SBI for Zomato on 01-03-2026"</em></div>', unsafe_allow_html=True)
+
+        sms_text = st.text_area("Paste SMS or transaction message here", placeholder="Your account XX1234 is debited by Rs.500 on 01-Mar-26...", height=100)
+
+        if st.button("📱 Extract from SMS", use_container_width=True):
+            if sms_text:
+                from utils.ocr_extractor import extract_from_text
+                result = extract_from_text(sms_text)
+                st.session_state['sms_result'] = result
+            else:
+                st.error("Please paste a message first!")
+
+        if 'sms_result' in st.session_state:
+            result = st.session_state['sms_result']
+            st.success("✅ Details extracted! Review and save below:")
+            with st.form("sms_expense_form"):
+                amount = st.number_input("Amount (₹)", value=float(result.get('amount', 0.0)), min_value=0.0)
+                exp_date = st.date_input("Date", value=date.today())
+                description = st.text_input("Description", value=result.get('description', ''))
+                category = st.selectbox("Category", CATEGORIES,
+                    index=CATEGORIES.index(result.get('category', 'Others')) if result.get('category') in CATEGORIES else 0)
+                if st.form_submit_button("💾 Save Expense", use_container_width=True):
+                    add_expense(str(exp_date), amount, category, description, source='sms')
+                    st.success(f"✅ ₹{amount:,.0f} saved under {category}!")
+                    del st.session_state['sms_result']
+                    st.balloons()
+
+    # ── TAB 2: Manual Entry ──
+    with tab2:
+        col1, col2 = st.columns(2)
+        with col1:
+            manual_amount = st.number_input("Amount (₹) *", min_value=0.0, step=10.0, key="manual_amount")
+            manual_date = st.date_input("Date *", value=date.today(), key="manual_date")
+        with col2:
+            manual_desc = st.text_input("Description *", placeholder="e.g. Zomato dinner, Uber ride...", key="manual_desc")
+
+        # Auto-categorize as user types — always correct on first save
+        if manual_desc:
+            auto_cat = categorize_text_expense(manual_desc, manual_amount)
+        else:
+            auto_cat = 'Others'
+        cat_index = CATEGORIES.index(auto_cat) if auto_cat in CATEGORIES else len(CATEGORIES) - 1
+        manual_category = st.selectbox("Category", CATEGORIES, index=cat_index, key="manual_cat")
+
+        if st.button("➕ Add Expense", use_container_width=True, key="manual_submit"):
+            # Input Validation
+            errors = []
+            if manual_amount <= 0:
+                errors.append("❌ Amount must be greater than ₹0")
+            if manual_amount > 10000000:
+                errors.append("❌ Amount seems too high. Please check the value.")
+            if not manual_desc.strip():
+                errors.append("❌ Description cannot be empty")
+            if len(manual_desc.strip()) < 2:
+                errors.append("❌ Description is too short — please be more descriptive")
+            if manual_date > date.today():
+                errors.append("❌ Date cannot be in the future")
+
+            if errors:
+                for err in errors:
+                    st.error(err)
+            else:
+                add_expense(str(manual_date), manual_amount, manual_category, manual_desc.strip(), source='manual')
+                st.success(f"✅ ₹{manual_amount:,.0f} added under **{manual_category}**!")
+
+                # ── Auto Analysis After Adding Expense ──
+                from utils.financial_advisor import analyze_spending_health, get_savings_rate_advice, calculate_financial_health_score
+                from datetime import datetime as dt2
+                now2 = dt2.now()
+                cat_totals2 = get_category_totals(now2.year, now2.month)
+                income2 = st.session_state.get('monthly_income', 0)
+
+                if not cat_totals2.empty and income2 > 0:
+                    score, grade, reasons = calculate_financial_health_score(cat_totals2, income2)
+                    score_color = '#4ade80' if score >= 80 else '#facc15' if score >= 60 else '#f87171'
+                    st.markdown(f'<div class="metric-card" style="margin-top:1rem"><b>Financial Health Score: <span style="color:{score_color}">{score}/100 — {grade}</span></b></div>', unsafe_allow_html=True)
+
+                    alerts, suggestions = analyze_spending_health(cat_totals2, income2)
+                    if alerts:
+                        st.markdown("**⚠️ Budget Alerts:**")
+                        for alert in alerts[:2]:
+                            st.markdown(f'<div class="alert-danger">{alert}</div>', unsafe_allow_html=True)
+
+                    savings_advice = get_savings_rate_advice(cat_totals2['total'].sum(), income2)
+                    if savings_advice:
+                        st.markdown(f'<div class="alert-info">{savings_advice}</div>', unsafe_allow_html=True)
+
+                    category_tips = {
+                        'Food & Dining': 'Tip: Cooking at home 3x a week can save up to 2000/month!',
+                        'Shopping': 'Tip: Wait 48 hours before purchases over 2000 to avoid impulse buying!',
+                        'Entertainment': 'Tip: Share OTT subscriptions with family to cut costs by 50%!',
+                        'Transportation': 'Tip: A monthly metro pass saves more than daily tickets!',
+                        'Groceries': 'Tip: Buy staples in bulk monthly — saves 15-20% on grocery bills!',
+                    }
+                    if manual_category in category_tips:
+                        st.info(category_tips[manual_category])
+
+    # ── TAB 3: CSV Import ──
+    with tab3:
+        st.markdown("Import your bank statement or transaction CSV file")
+        st.markdown("""
+        <div class="alert-info">
+        📋 <strong>Supported formats:</strong> SBI, HDFC, ICICI bank statement exports. 
+        CSV should have columns: Date, Amount/Debit, Description/Narration
+        </div>
+        """, unsafe_allow_html=True)
+
+        csv_file = st.file_uploader("Upload CSV", type=['csv'], label_visibility="collapsed")
+
+        if csv_file:
+            try:
+                df = pd.read_csv(csv_file)
+                st.markdown(f"**Preview ({len(df)} rows):**")
+                st.dataframe(df.head(5), use_container_width=True)
+
+                if st.button("🚀 Import All Transactions"):
+                    expenses, error = parse_csv_bank_statement(df)
+                    if error:
+                        st.error(error)
+                    else:
+                        for exp in expenses:
+                            add_expense(exp['date'], exp['amount'], exp['category'],
+                                        exp['description'], source='csv_import')
+                        st.success(f"✅ Successfully imported {len(expenses)} transactions!")
+            except Exception as e:
+                st.error(f"Error reading CSV: {str(e)}")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE: ANALYTICS
+# ═══════════════════════════════════════════════════════════════════════════════
+elif page == "📊 Analytics":
+    st.markdown('<div class="section-header">SPENDING ANALYTICS</div>', unsafe_allow_html=True)
+
+    now = datetime.now()
+    income = st.session_state.get('monthly_income', 0)
+
+    # ── Date Filter ──
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        selected_year = st.selectbox("Year", [2024, 2025, 2026], index=2)
+    with col_f2:
+        selected_month = st.selectbox("Month", list(range(1, 13)), 
+                                       index=now.month-1,
+                                       format_func=lambda x: datetime(2026, x, 1).strftime('%B'))
+
+    cat_totals = get_category_totals(selected_year, selected_month)
+    all_expenses = get_expenses(limit=500)
+
+    if cat_totals.empty:
+        st.info("No expenses found for this period. Add some expenses to see analytics!")
+    else:
+        total_spent = cat_totals['total'].sum()
+        savings = income - total_spent if income > 0 else 0
+
+        # ── Key Metrics ──
+        m1, m2, m3, m4 = st.columns(4)
+        with m1:
+            st.markdown(f"""<div class="metric-card">
+                <div style="font-size:0.75rem;color:rgba(232,224,208,0.5);letter-spacing:2px">TOTAL SPENT</div>
+                <div style="font-family:Cinzel,serif;font-size:1.5rem;color:#c4a050">₹{total_spent:,.0f}</div>
+            </div>""", unsafe_allow_html=True)
+        with m2:
+            st.markdown(f"""<div class="metric-card">
+                <div style="font-size:0.75rem;color:rgba(232,224,208,0.5);letter-spacing:2px">TRANSACTIONS</div>
+                <div style="font-family:Cinzel,serif;font-size:1.5rem;color:#c4a050">{len(all_expenses)}</div>
+            </div>""", unsafe_allow_html=True)
+        with m3:
+            avg = total_spent / len(all_expenses) if len(all_expenses) > 0 else 0
+            st.markdown(f"""<div class="metric-card">
+                <div style="font-size:0.75rem;color:rgba(232,224,208,0.5);letter-spacing:2px">AVG TRANSACTION</div>
+                <div style="font-family:Cinzel,serif;font-size:1.5rem;color:#c4a050">₹{avg:,.0f}</div>
+            </div>""", unsafe_allow_html=True)
+        with m4:
+            savings_rate = (savings/income*100) if income > 0 else 0
+            color = "#4ade80" if savings_rate >= 20 else "#f87171"
+            st.markdown(f"""<div class="metric-card">
+                <div style="font-size:0.75rem;color:rgba(232,224,208,0.5);letter-spacing:2px">SAVINGS RATE</div>
+                <div style="font-family:Cinzel,serif;font-size:1.5rem;color:{color}">{savings_rate:.1f}%</div>
+            </div>""", unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # ── Row 1: Pie Chart + Bar Chart ──
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown('<div class="section-header">SPENDING BY CATEGORY</div>', unsafe_allow_html=True)
+            fig_pie = px.pie(
+                cat_totals, values='total', names='category',
+                hole=0.4,
+                color_discrete_sequence=['#c4a050','#4ade80','#60a5fa','#f87171',
+                                         '#a78bfa','#fb923c','#34d399','#f472b6',
+                                         '#facc15','#38bdf8','#818cf8','#e879f9']
+            )
+            fig_pie.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='#e8e0d0'),
+                showlegend=True,
+                legend=dict(font=dict(size=10))
+            )
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+        with col2:
+            st.markdown('<div class="section-header">TOP CATEGORIES</div>', unsafe_allow_html=True)
+            top_cats = cat_totals.nlargest(8, 'total')
+            fig_bar = px.bar(
+                top_cats, x='total', y='category',
+                orientation='h',
+                color='total',
+                color_continuous_scale=['#604820', '#c4a050', '#f0d080']
+            )
+            fig_bar.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='#e8e0d0'),
+                showlegend=False,
+                coloraxis_showscale=False,
+                xaxis_title="Amount (₹)",
+                yaxis_title=""
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+        # ── Row 2: Daily Spending Trend ──
+        if not all_expenses.empty and 'date' in all_expenses.columns:
+            st.markdown('<div class="section-header">DAILY SPENDING TREND</div>', unsafe_allow_html=True)
+            
+            try:
+                all_expenses['date'] = pd.to_datetime(all_expenses['date'])
+                daily = all_expenses.groupby('date')['amount'].sum().reset_index()
+                daily = daily.sort_values('date')
+                daily['cumulative'] = daily['amount'].cumsum()
+
+                fig_trend = px.line(
+                    daily, x='date', y='amount',
+                    title='',
+                    markers=True,
+                    color_discrete_sequence=['#c4a050']
+                )
+                fig_trend.add_scatter(
+                    x=daily['date'], y=daily['cumulative'],
+                    mode='lines', name='Cumulative',
+                    line=dict(color='#4ade80', dash='dash')
+                )
+                fig_trend.update_layout(
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='#e8e0d0'),
+                    xaxis=dict(gridcolor='rgba(196,160,80,0.1)'),
+                    yaxis=dict(gridcolor='rgba(196,160,80,0.1)'),
+                    legend=dict(font=dict(size=10))
+                )
+                st.plotly_chart(fig_trend, use_container_width=True)
+            except Exception as e:
+                st.info("Add more expenses to see daily trends!")
+
+        # ── Row 3: Spending Anomaly Detection ──
+        st.markdown('<div class="section-header">SPENDING INSIGHTS & ANOMALIES</div>', unsafe_allow_html=True)
+        
+        col3, col4 = st.columns(2)
+        
+        with col3:
+            # Anomaly detection - categories over healthy limit
+            healthy_limits = {
+                'Food & Dining': 15, 'Transportation': 10, 'Shopping': 10,
+                'Entertainment': 5, 'Groceries': 15, 'Utilities & Bills': 10,
+                'Healthcare': 5, 'Personal Care': 5
+            }
+            
+            anomalies = []
+            if income > 0:
+                for _, row in cat_totals.iterrows():
+                    cat = row['category']
+                    pct = (row['total'] / income) * 100
+                    if cat in healthy_limits and pct > healthy_limits[cat] * 1.5:
+                        anomalies.append((cat, pct, healthy_limits[cat], row['total']))
+            
+            if anomalies:
+                st.markdown("**⚠️ Spending Anomalies Detected:**")
+                for cat, pct, limit, amount in anomalies:
+                    st.markdown(f"""
+                    <div class="alert-danger">
+                        <b>{cat}</b>: ₹{amount:,.0f} ({pct:.1f}% of income) — 
+                        recommended max is {limit}%
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div class="alert-info">
+                    ✅ No spending anomalies detected! All categories within healthy limits.
+                </div>
+                """, unsafe_allow_html=True)
+
+        with col4:
+            # Spending forecast
+            if income > 0:
+                days_in_month = 30
+                days_passed = now.day
+                daily_rate = total_spent / days_passed if days_passed > 0 else 0
+                projected = daily_rate * days_in_month
+                
+                proj_color = "#4ade80" if projected < income * 0.8 else "#f87171"
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div style="font-size:0.8rem;color:rgba(232,224,208,0.5)">MONTHLY FORECAST</div>
+                    <div style="font-family:Cinzel,serif;font-size:1.8rem;color:{proj_color}">
+                        ₹{projected:,.0f}
+                    </div>
+                    <div style="font-size:0.8rem;color:rgba(232,224,208,0.5)">
+                        Based on ₹{daily_rate:,.0f}/day average
+                    </div>
+                    {'<div style="color:#4ade80;font-size:0.85rem">✅ On track to save this month!</div>' 
+                     if projected < income * 0.8 
+                     else '<div style="color:#f87171;font-size:0.85rem">⚠️ Projected to overspend!</div>'}
+                </div>
+                """, unsafe_allow_html=True)
+
+        # ── Indian Spending Pattern Visualization ──
+        st.markdown('<div class="section-header">INDIAN SPENDING PATTERN ANALYSIS</div>', unsafe_allow_html=True)
+        st.markdown("How your spending compares to recommended Indian lifestyle benchmarks:")
+
+        from utils.ocr_extractor import get_indian_spending_insights
+        insights = get_indian_spending_insights(cat_totals, income)
+
+        if insights:
+            # Build comparison chart
+            benchmark_data = []
+            for ins in insights:
+                benchmark_data.append({
+                    'Category': ins['category'],
+                    'Your Spending %': round(ins['percent'], 1),
+                    'Recommended %': ins['limit'],
+                    'Status': '⚠️ Over' if ins['status'] == 'over' else '✅ OK'
+                })
+
+            if benchmark_data:
+                bench_df = pd.DataFrame(benchmark_data)
+
+                # Bar chart comparing actual vs recommended
+                fig_bench = go.Figure()
+                fig_bench.add_trace(go.Bar(
+                    name='Your Spending %',
+                    x=bench_df['Category'],
+                    y=bench_df['Your Spending %'],
+                    marker_color=['#f87171' if s == '⚠️ Over' else '#4ade80' for s in bench_df['Status']],
+                ))
+                fig_bench.add_trace(go.Bar(
+                    name='Recommended %',
+                    x=bench_df['Category'],
+                    y=bench_df['Recommended %'],
+                    marker_color='rgba(196,160,80,0.4)',
+                ))
+                fig_bench.update_layout(
+                    barmode='group',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='#e8e0d0', family='Raleway'),
+                    xaxis=dict(gridcolor='rgba(196,160,80,0.1)', tickangle=-30),
+                    yaxis=dict(gridcolor='rgba(196,160,80,0.1)', title='% of Income'),
+                    legend=dict(bgcolor='rgba(0,0,0,0)'),
+                    margin=dict(t=20, b=20),
+                )
+                st.plotly_chart(fig_bench, use_container_width=True)
+
+                # Tips for over-budget categories
+                over_budget = [i for i in insights if i['status'] == 'over']
+                ok_budget = [i for i in insights if i['status'] == 'ok']
+
+                col_ib1, col_ib2 = st.columns(2)
+                with col_ib1:
+                    if over_budget:
+                        st.markdown("**⚠️ Needs Attention:**")
+                        for ins in over_budget:
+                            st.markdown(f'<div class="alert-danger"><b>{ins["category"]}</b>: {ins["percent"]:.1f}% of income (limit: {ins["limit"]}%)<br><small>{ins["tip"]}</small></div>', unsafe_allow_html=True)
+                with col_ib2:
+                    if ok_budget:
+                        st.markdown("**✅ Well Managed:**")
+                        for ins in ok_budget[:4]:
+                            st.markdown(f'<div class="alert-success"><b>{ins["category"]}</b>: {ins["percent"]:.1f}% — within {ins["limit"]}% limit</div>', unsafe_allow_html=True)
+        else:
+            st.info("Add more expenses to see your Indian spending pattern analysis!")
+
+        # ── UPI Analysis ──
+        st.markdown('<div class="section-header">UPI TRANSACTION ANALYSIS</div>', unsafe_allow_html=True)
+
+        if not all_expenses.empty:
+            upi_apps = {
+                'phonepe': 'PhonePe',
+                'gpay': 'Google Pay',
+                'google pay': 'Google Pay',
+                'paytm': 'Paytm',
+                'bhim': 'BHIM UPI',
+                'amazon pay': 'Amazon Pay',
+                'cred': 'CRED',
+                'mobikwik': 'MobiKwik',
+                'freecharge': 'FreeCharge',
+                'airtel money': 'Airtel Money',
+                'jiomoney': 'JioMoney',
+                'navi': 'Navi',
+                'slice': 'Slice',
+            }
+            upi_counts = {}
+            upi_amounts = {}
+            for _, row in all_expenses.iterrows():
+                desc_lower = str(row.get('description', '')).lower()
+                source = str(row.get('source', '')).lower()
+                matched = False
+                for app_key, app_name in upi_apps.items():
+                    if app_key in desc_lower or app_key in source:
+                        upi_counts[app_name] = upi_counts.get(app_name, 0) + 1
+                        upi_amounts[app_name] = upi_amounts.get(app_name, 0) + row['amount']
+                        matched = True
+                        break
+                if not matched and row.get('source') == 'screenshot':
+                    upi_amounts['Other UPI'] = upi_amounts.get('Other UPI', 0) + row['amount']
+                    upi_counts['Other UPI'] = upi_counts.get('Other UPI', 0) + 1
+
+            col_u1, col_u2 = st.columns(2)
+            with col_u1:
+                if upi_amounts:
+                    st.markdown("**Spending by UPI App**")
+                    upi_df = pd.DataFrame({'App': list(upi_amounts.keys()), 'Amount': list(upi_amounts.values())})
+                    fig_upi = px.pie(upi_df, values='Amount', names='App', hole=0.4,
+                        color_discrete_sequence=['#c4a050','#4ade80','#60a5fa','#f87171','#a78bfa','#fb923c','#34d399','#f472b6','#facc15'])
+                    fig_upi.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                        font=dict(color='#e8e0d0'), margin=dict(t=20,b=20,l=20,r=20))
+                    st.plotly_chart(fig_upi, use_container_width=True)
+                else:
+                    st.info("No UPI transactions detected yet. Upload PhonePe, GPay or Paytm screenshots!")
+
+            with col_u2:
+                st.markdown("**UPI App Summary**")
+                if upi_amounts:
+                    total_upi = sum(upi_amounts.values())
+                    for app, amount in sorted(upi_amounts.items(), key=lambda x: x[1], reverse=True):
+                        count = upi_counts.get(app, 0)
+                        pct = (amount / total_upi * 100) if total_upi > 0 else 0
+                        bar = f'<div style="background:rgba(255,255,255,0.1);border-radius:4px;height:6px;margin-top:0.4rem;overflow:hidden"><div style="width:{pct:.1f}%;background:#c4a050;height:100%;border-radius:4px"></div></div>'
+                        st.markdown(f'<div class="advice-card" style="padding:0.8rem;margin-bottom:0.5rem"><div style="display:flex;justify-content:space-between"><b style="color:#c4a050">{app}</b><span style="color:#4ade80">Rs.{amount:,.0f}</span></div><div style="display:flex;justify-content:space-between;margin-top:0.3rem"><small style="color:rgba(232,224,208,0.5)">{count} transactions</small><small style="color:rgba(232,224,208,0.5)">{pct:.1f}%</small></div>{bar}</div>', unsafe_allow_html=True)
+                    top_app = max(upi_amounts, key=upi_amounts.get)
+                    st.markdown(f'<div class="alert-info">Most used: <b>{top_app}</b> - Rs.{upi_amounts[top_app]:,.0f}</div>', unsafe_allow_html=True)
+                else:
+                    st.info("Upload UPI screenshots to see app-wise breakdown!")
+
+        # ── Transaction Table + Export ──
+        st.markdown('<div class="section-header">TRANSACTION DETAILS</div>', unsafe_allow_html=True)
+        if not all_expenses.empty:
+            # ── Delete Expense ──
+            col_del1, col_del2 = st.columns([3, 1])
+            with col_del1:
+                expense_options = {
+                    f"#{row['id']} | {row['date']} | ₹{row['amount']:,.0f} | {row['category']} | {row['description'][:30]}": row['id']
+                    for _, row in all_expenses.iterrows()
+                }
+                selected_expense = st.selectbox(
+                    "🗑️ Select expense to delete",
+                    options=["-- Select to delete --"] + list(expense_options.keys()),
+                    key="delete_select"
+                )
+            with col_del2:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("🗑️ Delete", use_container_width=True, key="delete_btn"):
+                    if selected_expense != "-- Select to delete --":
+                        expense_id = expense_options[selected_expense]
+                        delete_expense(expense_id)
+                        st.success("✅ Expense deleted!")
+                        st.rerun()
+                    else:
+                        st.warning("Please select an expense to delete!")
+
+            display_df = all_expenses[['date', 'amount', 'category', 'description', 'source']].copy()
+            display_df['source'] = display_df['source'].apply(lambda x: 'Screenshot' if x == 'screenshot' else 'Manual' if x == 'manual' else 'CSV' if x == 'csv_import' else 'Splitwise' if x == 'splitwise' else 'SMS' if x == 'sms' else x)
+            display_df.columns = ['Date', 'Amount', 'Category', 'Description', 'Source']
+
+            # ── Export Buttons ──
+            st.markdown("**📥 Export Your Data**")
+            col_e1, col_e2, col_e3 = st.columns(3)
+
+            with col_e1:
+                # CSV Export
+                csv_data = display_df.to_csv(index=False)
+                st.download_button(
+                    label="📄 Download CSV",
+                    data=csv_data,
+                    file_name=f"custos_expenses_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+
+            with col_e2:
+                # Monthly Summary CSV
+                summary_df = all_expenses.groupby(['category'])['amount'].agg(['sum', 'count']).reset_index()
+                summary_df.columns = ['Category', 'Total Amount', 'Transactions']
+                summary_df['Average'] = (summary_df['Total Amount'] / summary_df['Transactions']).round(2)
+                summary_csv = summary_df.to_csv(index=False)
+                st.download_button(
+                    label="📊 Category Summary CSV",
+                    data=summary_csv,
+                    file_name=f"custos_summary_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+
+            with col_e3:
+                # Word Document Report using python-docx
+                try:
+                    from docx import Document
+                    from docx.shared import Pt, RGBColor
+                    from docx.enum.text import WD_ALIGN_PARAGRAPH
+                    import io
+
+                    doc = Document()
+                    doc.add_heading('CUSTOS — Financial Report', 0)
+                    doc.add_paragraph(f'Generated: {datetime.now().strftime("%d %b %Y")}')
+                    doc.add_paragraph(f'Monthly Income: Rs.{st.session_state.get("monthly_income", 0):,.0f}')
+
+                    doc.add_heading('Spending Summary', level=1)
+                    total_spent_doc = all_expenses['amount'].sum()
+                    doc.add_paragraph(f'Total Spent: Rs.{total_spent_doc:,.2f}')
+                    doc.add_paragraph(f'Total Transactions: {len(all_expenses)}')
+
+                    doc.add_heading('Spending by Category', level=1)
+                    summary_doc = all_expenses.groupby('category')['amount'].sum().reset_index()
+                    table = doc.add_table(rows=1, cols=2)
+                    table.style = 'Table Grid'
+                    hdr = table.rows[0].cells
+                    hdr[0].text = 'Category'
+                    hdr[1].text = 'Amount (Rs.)'
+                    for _, row in summary_doc.iterrows():
+                        cells = table.add_row().cells
+                        cells[0].text = str(row['category'])
+                        cells[1].text = f"Rs.{row['amount']:,.2f}"
+
+                    doc.add_heading('Top 10 Transactions', level=1)
+                    top10_doc = all_expenses.nlargest(10, 'amount')[['date','amount','category','description']]
+                    table2 = doc.add_table(rows=1, cols=4)
+                    table2.style = 'Table Grid'
+                    hdrs = table2.rows[0].cells
+                    hdrs[0].text = 'Date'
+                    hdrs[1].text = 'Amount'
+                    hdrs[2].text = 'Category'
+                    hdrs[3].text = 'Description'
+                    for _, row in top10_doc.iterrows():
+                        cells = table2.add_row().cells
+                        cells[0].text = str(row['date'])
+                        cells[1].text = f"Rs.{row['amount']:,.2f}"
+                        cells[2].text = str(row['category'])
+                        cells[3].text = str(row['description'])[:30]
+
+                    doc.add_paragraph('\nDisclaimer: This is not financial advice. Consult a certified financial advisor for major decisions.')
+
+                    buf = io.BytesIO()
+                    doc.save(buf)
+                    buf.seek(0)
+                    st.download_button(
+                        label="📝 Download Word Report",
+                        data=buf.getvalue(),
+                        file_name=f"custos_report_{datetime.now().strftime('%Y%m%d')}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True
+                    )
+                except ImportError:
+                    st.info("Install python-docx for Word reports")
+
+            col_e4 = st.columns(1)[0]
+            with col_e4:
+                # Text Report fallback
+                income = st.session_state.get('monthly_income', 0)
+                total_spent = all_expenses['amount'].sum()
+                month_prefix = str(datetime.now().year) + '-' + str(datetime.now().month).zfill(2)
+                savings = income - all_expenses[all_expenses['date'].astype(str).str.startswith(month_prefix)]['amount'].sum() if income > 0 else 0
+
+                report_lines = [
+                    "CUSTOS — FINANCIAL REPORT",
+                    "=" * 40,
+                    f"Generated: {datetime.now().strftime('%d %b %Y')}",
+                    f"Monthly Income: Rs.{income:,.0f}",
+                    "",
+                    "SPENDING SUMMARY",
+                    "-" * 40,
+                    f"Total Spent: Rs.{total_spent:,.2f}",
+                    f"Total Transactions: {len(all_expenses)}",
+                    f"Average Transaction: Rs.{total_spent/len(all_expenses):,.2f}",
+                    "",
+                    "BY CATEGORY",
+                    "-" * 40,
+                ]
+                for _, row in summary_df.iterrows():
+                    report_lines.append(f"{row['Category']}: Rs.{row['Total Amount']:,.2f} ({row['Transactions']} txns)")
+
+                report_lines += [
+                    "",
+                    "TOP 10 TRANSACTIONS",
+                    "-" * 40,
+                ]
+                top10 = all_expenses.nlargest(10, 'amount')[['date', 'amount', 'category', 'description']]
+                for _, row in top10.iterrows():
+                    report_lines.append(f"{row['date']} | Rs.{row['amount']:,.2f} | {row['category']} | {row['description']}")
+
+                report_lines += [
+                    "",
+                    "=" * 40,
+                    "Disclaimer: This is not financial advice.",
+                    "Consult a certified financial advisor for major decisions.",
+                ]
+                report_text = "\n".join(report_lines)
+                st.download_button(
+                    label="📋 Download Report",
+                    data=report_text,
+                    file_name=f"custos_report_{datetime.now().strftime('%Y%m%d')}.txt",
+                    mime="text/plain",
+                    use_container_width=True
+                )
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            display_df['Amount'] = display_df['Amount'].apply(lambda x: f"Rs.{float(str(x).replace('Rs.','').replace(',','')):,.2f}" if isinstance(x, (int, float)) else x)
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("No transactions yet. Add some expenses to export!")
+
+
+elif page == "🤖 AI Advisor":
+    st.markdown('<div class="section-header">AI FINANCIAL ADVISOR</div>', unsafe_allow_html=True)
+
+    col1, col2 = st.columns([1, 2])
+
+    with col1:
+        st.markdown("**Choose Your Financial Guru**")
+        guru = st.selectbox("", list(FINANCIAL_GURUS.keys()), label_visibility="collapsed")
+        guru_data = FINANCIAL_GURUS[guru]
+        st.markdown(f"""
+        <div class="advice-card" style="margin-top:0.5rem">
+            <div style="color:#c4a050; font-family: Cinzel, serif; font-size:1.1rem; margin-bottom:0.5rem">{guru_data['icon']} {guru}</div>
+            <div style="font-size:0.85rem; color:rgba(232,224,208,0.7); font-style:italic">{guru_data['philosophy']}</div>
+            <hr style="border-color:rgba(196,160,80,0.2); margin:0.8rem 0">
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("**Key Principles**")
+        for principle in guru_data['principles'][:3]:
+            st.markdown(f'<div class="alert-info" style="font-size:0.82rem; margin:0.3rem 0">💬 {principle}</div>', unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("**Indian Investment Guide**")
+        for product, desc in INDIAN_FINANCIAL_ADVICE['Investment Options'].items():
+            with st.expander(f"📈 {product}"):
+                st.markdown(f"<small>{desc}</small>", unsafe_allow_html=True)
+
+    with col2:
+        now = datetime.now()
+        income = st.session_state.get('monthly_income', 0)
+        cat_totals = get_category_totals(now.year, now.month)
+
+        # Indian Finance Tabs
+        advisor_tab1, advisor_tab2, advisor_tab3 = st.tabs(["🤖 Guru Advice", "🇮🇳 Indian Investment Plan", "💰 Tax Calculator"])
+
+        with advisor_tab2:
+            st.markdown("### 🇮🇳 Your Personalized Indian Investment Plan")
+            if income <= 0:
+                st.warning("Set your monthly income in the sidebar first!")
+            else:
+                total_exp = cat_totals['total'].sum() if not cat_totals.empty else 0
+                plan, savings, savings_rate = get_indian_investment_plan(income, total_exp)
+
+                savings_color = "#4ade80" if savings >= 0 else "#f87171"
+                st.markdown(f"""
+                <div class="metric-card" style="margin-bottom:1rem">
+                    <div style="display:flex; justify-content:space-between">
+                        <div>
+                            <div style="font-size:0.8rem;color:rgba(232,224,208,0.5)">MONTHLY SAVINGS</div>
+                            <div style="font-family:Cinzel,serif;font-size:1.8rem;color:{savings_color}">₹{savings:,.0f}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.8rem;color:rgba(232,224,208,0.5)">SAVINGS RATE</div>
+                            <div style="font-family:Cinzel,serif;font-size:1.8rem;color:{savings_color}">{savings_rate:.1f}%</div>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                st.markdown("**Step-by-step investment roadmap:**")
+                for step in plan:
+                    with st.expander(f"{step['icon']} Priority {step['priority']}: {step['step']} — ₹{step['monthly']:,}/month"):
+                        st.markdown(f"**Where:** {step['where']}")
+                        st.markdown(f"**Why:** {step['why']}")
+                        if step['target']:
+                            st.markdown(f"**Annual Target:** ₹{step['target']:,}")
+
+                # SIP Calculator
+                st.markdown("---")
+                st.markdown("### 📊 SIP Returns Calculator")
+                col_s1, col_s2, col_s3 = st.columns(3)
+                with col_s1:
+                    sip_amt = st.number_input("Monthly SIP (₹)", min_value=500, max_value=100000, value=max(500, int(savings*0.5) if savings > 0 else 500), step=500)
+                with col_s2:
+                    sip_years = st.selectbox("Duration", [5, 10, 15, 20, 25, 30], index=1)
+                with col_s3:
+                    sip_return = st.selectbox("Expected Return %", [8, 10, 12, 15], index=2)
+
+                maturity, invested, returns = calculate_sip_returns(sip_amt, sip_years, sip_return)
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:1rem">
+                        <div style="text-align:center">
+                            <div style="font-size:0.75rem;color:rgba(232,224,208,0.5)">INVESTED</div>
+                            <div style="font-family:Cinzel,serif;font-size:1.3rem;color:#c4a050">₹{invested:,.0f}</div>
+                        </div>
+                        <div style="text-align:center">
+                            <div style="font-size:0.75rem;color:rgba(232,224,208,0.5)">RETURNS</div>
+                            <div style="font-family:Cinzel,serif;font-size:1.3rem;color:#4ade80">₹{returns:,.0f}</div>
+                        </div>
+                        <div style="text-align:center">
+                            <div style="font-size:0.75rem;color:rgba(232,224,208,0.5)">MATURITY VALUE</div>
+                            <div style="font-family:Cinzel,serif;font-size:1.3rem;color:#c4a050">₹{maturity:,.0f}</div>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        with advisor_tab3:
+            st.markdown("### 💰 Indian Tax Calculator & Savings")
+            if income <= 0:
+                st.warning("Set your monthly income in the sidebar first!")
+            else:
+                tax_data = get_tax_saving_summary(income)
+
+                col_t1, col_t2 = st.columns(2)
+                with col_t1:
+                    st.markdown(f"""
+                    <div class="advice-card">
+                        <div style="color:#c4a050;font-family:Cinzel,serif;margin-bottom:0.8rem">NEW TAX REGIME</div>
+                        <div style="font-size:1.5rem;font-family:Cinzel,serif">₹{tax_data['tax_new_regime']:,.0f}</div>
+                        <div style="font-size:0.8rem;color:rgba(232,224,208,0.5)">No deductions needed. Simpler filing.</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col_t2:
+                    st.markdown(f"""
+                    <div class="advice-card">
+                        <div style="color:#c4a050;font-family:Cinzel,serif;margin-bottom:0.8rem">OLD REGIME + DEDUCTIONS</div>
+                        <div style="font-size:1.5rem;font-family:Cinzel,serif">₹{tax_data['tax_old_with_deductions']:,.0f}</div>
+                        <div style="font-size:0.8rem;color:rgba(232,224,208,0.5)">With 80C + 80D + NPS deductions.</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                better = tax_data['better_regime']
+                tax_benefit = tax_data['tax_new_regime'] - tax_data['tax_old_with_deductions']
+                if better == "old":
+                    st.success(f"✅ Old regime saves you ₹{tax_benefit:,.0f}/year! Invest in 80C instruments.")
+                else:
+                    st.info(f"ℹ️ New regime is better for you by ₹{abs(tax_benefit):,.0f}/year. No need for complex investments.")
+
+                st.markdown("### 🎯 80C Investment Recommendations")
+                recs = get_80c_recommendations(income, 20)
+                for rec in recs:
+                    with st.expander(f"{rec['icon']} {rec['product']} — ₹{rec['monthly_amount']:,}/month"):
+                        col_r1, col_r2 = st.columns(2)
+                        with col_r1:
+                            st.markdown(f"**Annual Amount:** ₹{rec['annual_amount']:,}")
+                            st.markdown(f"**Risk Level:** {rec['risk']}")
+                        with col_r2:
+                            st.markdown(f"**Platform:** {rec['platform']}")
+                        st.markdown(f"**Benefit:** {rec['benefit']}")
+
+        with advisor_tab1:
+            # Financial Health Score
+            score, grade, reasons = calculate_financial_health_score(cat_totals, income)
+            score_color = "#4ade80" if score >= 80 else "#facc15" if score >= 60 else "#f87171"
+            st.markdown(f"""
+            <div class="metric-card" style="margin-bottom:1rem">
+                <div style="display:flex; justify-content:space-between; align-items:center">
+                    <div>
+                        <div style="font-size:0.8rem; color:rgba(232,224,208,0.5); letter-spacing:2px; text-transform:uppercase">Financial Health Score</div>
+                        <div style="font-family:Cinzel,serif; font-size:2rem; color:{score_color}">{score}/100</div>
+                        <div style="font-size:0.9rem; color:{score_color}">{grade}</div>
+                    </div>
+                    <div style="font-size:3rem">{guru_data['icon']}</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Spending alerts
+            alerts, suggestions = analyze_spending_health(cat_totals, income)
+            if alerts:
+                st.markdown("**⚠️ Spending Alerts**")
+                for alert in alerts:
+                    st.markdown(f'<div class="alert-danger">{alert}</div>', unsafe_allow_html=True)
+
+            if st.button(f"{guru_data['icon']} Generate Advice from {guru}", use_container_width=True):
+                with st.spinner(f"Analysing your finances through {guru}'s lens..."):
+                    advice = generate_rule_based_advice(cat_totals, income, guru)
+                st.markdown(f"""
+                <div class="advice-card">
+                    <div style="color:#c4a050; font-family:Cinzel,serif; font-size:0.9rem;
+                                letter-spacing:2px; margin-bottom:1rem">
+                        {guru_data['icon']} ADVICE FROM {guru.upper()}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                st.markdown(advice)
+
+            # Tax saving section
+            st.markdown('<div class="section-header" style="margin-top:1.5rem">TAX SAVING TIPS</div>', unsafe_allow_html=True)
+
+            # Income slab info
+            annual_inc = income * 12
+            if annual_inc <= 300000:
+                slab_msg = "✅ Your income is below ₹3L — No tax under new regime!"
+                slab_color = "#4ade80"
+            elif annual_inc <= 700000:
+                slab_msg = f"ℹ️ Annual income ₹{annual_inc/100000:.1f}L — eligible for full tax rebate under new regime (Sec 87A)"
+                slab_color = "#facc15"
+            elif annual_inc <= 1000000:
+                slab_msg = f"⚠️ Annual income ₹{annual_inc/100000:.1f}L — invest in 80C instruments to reduce tax!"
+                slab_color = "#fb923c"
+            else:
+                slab_msg = f"🚨 Annual income ₹{annual_inc/100000:.1f}L — maximize ALL deductions (80C + 80D + NPS + HRA)"
+                slab_color = "#f87171"
+
+            st.markdown(f'<div class="alert-info" style="border-color:{slab_color}"><b>Your Tax Slab:</b> {slab_msg}</div>', unsafe_allow_html=True)
+
+            # 80C progress in advisor
+            all_exp = get_expenses(limit=500)
+            if not all_exp.empty:
+                inv_exp = all_exp[all_exp['category'] == 'Investment & Savings']
+                invested_80c = inv_exp['amount'].sum() if not inv_exp.empty else 0
+                remaining = max(150000 - invested_80c, 0)
+                pct = min((invested_80c / 150000) * 100, 100)
+                bar_color = "#4ade80" if pct >= 80 else "#facc15" if pct >= 40 else "#f87171"
+                st.markdown(f"""
+                <div class="advice-card" style="margin:0.5rem 0">
+                    <div style="font-size:0.85rem;color:rgba(232,224,208,0.7);margin-bottom:0.4rem">
+                        <b>80C Progress:</b> ₹{invested_80c:,.0f} used of ₹1,50,000 limit
+                    </div>
+                    <div style="background:rgba(255,255,255,0.1);border-radius:6px;height:10px;overflow:hidden">
+                        <div style="width:{pct:.1f}%;background:{bar_color};height:100%;border-radius:6px"></div>
+                    </div>
+                    <div style="font-size:0.75rem;color:{bar_color};margin-top:0.3rem">
+                        ₹{remaining:,.0f} more to invest for maximum 80C benefit
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            for section, details in INDIAN_FINANCIAL_ADVICE['Tax Saving'].items():
+                st.markdown(f'<div class="alert-info"><strong>{section}:</strong> {details}</div>', unsafe_allow_html=True)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE: GOALS & BUDGET
+# ═══════════════════════════════════════════════════════════════════════════════
+elif page == "🎯 Goals & Budget":
+    st.markdown('<div class="section-header">GOALS & BUDGET MANAGEMENT</div>', unsafe_allow_html=True)
+
+    tab1, tab2 = st.tabs(["🎯 Financial Goals", "📋 Monthly Budgets"])
+
+    with tab1:
+        col1, col2 = st.columns([1, 1.5])
+
+        with col1:
+            st.markdown("**Add a New Goal**")
+            with st.form("add_goal_form"):
+                goal_name = st.text_input("Goal Name", placeholder="e.g. Emergency Fund, MacBook, Trip to Goa")
+                target = st.number_input("Target Amount (₹)", min_value=0.0, step=500.0)
+                deadline = st.date_input("Target Date", value=date.today())
+                if st.form_submit_button("➕ Add Goal", use_container_width=True):
+                    errors = []
+                    if not goal_name.strip():
+                        errors.append("❌ Goal name cannot be empty")
+                    if target <= 0:
+                        errors.append("❌ Target amount must be greater than ₹0")
+                    if target > 100000000:
+                        errors.append("❌ Target amount seems too high. Please check.")
+                    if deadline < date.today():
+                        errors.append("❌ Target date cannot be in the past")
+                    if errors:
+                        for err in errors:
+                            st.error(err)
+                    else:
+                        add_goal(goal_name.strip(), target, str(deadline))
+                        st.success(f"✅ Goal '{goal_name}' added!")
+
+        with col2:
+            st.markdown("**Your Financial Goals**")
+            goals = get_goals()
+            if not goals.empty:
+                for _, goal in goals.iterrows():
+                    progress = min((goal['current_amount'] / goal['target_amount']) * 100, 100)
+                    st.markdown(f"**{goal['goal_name']}**")
+                    st.progress(progress / 100)
+                    st.markdown(f"₹{goal['current_amount']:,.0f} / ₹{goal['target_amount']:,.0f} ({progress:.1f}%)")
+                    st.markdown("---")
+            else:
+                st.info("No goals yet. Add your first financial goal!")
+
+    with tab2:
+        col1, col2 = st.columns([1, 1.5])
+
+        with col1:
+            st.markdown("**Set Monthly Budget**")
+            with st.form("budget_form"):
+                cat = st.selectbox("Category", CATEGORIES)
+                limit = st.number_input("Monthly Limit (₹)", min_value=0.0, step=500.0)
+                if st.form_submit_button("💾 Set Budget", use_container_width=True):
+                    errors = []
+                    if limit <= 0:
+                        errors.append("❌ Budget limit must be greater than ₹0")
+                    if limit > 10000000:
+                        errors.append("❌ Budget limit seems too high. Please check.")
+                    if errors:
+                        for err in errors:
+                            st.error(err)
+                    else:
+                        set_budget(cat, limit)
+                        st.success(f"✅ Budget set for {cat}!")
+
+        with col2:
+            st.markdown("**Budget vs Actual (This Month)**")
+            budgets = get_budgets()
+            now = datetime.now()
+            cat_totals = get_category_totals(now.year, now.month)
+
+            if not budgets.empty and not cat_totals.empty:
+                merged = budgets.merge(cat_totals, on='category', how='left').fillna(0)
+                merged.columns = ['id', 'category', 'budget', 'created_at', 'spent']
+
+                fig = go.Figure()
+                fig.add_trace(go.Bar(name='Budget', x=merged['category'], y=merged['budget'],
+                                     marker_color='rgba(196,160,80,0.4)'))
+                fig.add_trace(go.Bar(name='Spent', x=merged['category'], y=merged['spent'],
+                                     marker_color='#c4a050'))
+                fig.update_layout(
+                    barmode='group',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='#e8e0d0', family='Raleway'),
+                    xaxis=dict(gridcolor='rgba(196,160,80,0.1)'),
+                    yaxis=dict(gridcolor='rgba(196,160,80,0.1)'),
+                    legend=dict(bgcolor='rgba(0,0,0,0)'),
+                    margin=dict(t=20, b=20),
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+                for _, row in merged.iterrows():
+                    if row['spent'] > row['budget']:
+                        overspend = row['spent'] - row['budget']
+                        st.markdown(f'<div class="alert-danger">⚠️ <strong>{row["category"]}</strong>: Over budget by ₹{overspend:,.0f}</div>', unsafe_allow_html=True)
+            else:
+                st.info("Set budgets and add expenses to see budget vs actual comparison.")
+
+
+# ═══ BOOK ADVISOR PAGE ════════════════════════════════════════════
+elif page == "📚 Book Advisor":
+    st.markdown('<div class="section-header">FINANCIAL BOOK ADVISOR</div>', unsafe_allow_html=True)
+    st.markdown('<div class="alert-info">Upload any financial book PDF and get personalized advice based on its principles applied to YOUR spending!</div>', unsafe_allow_html=True)
+
+    col1, col2 = st.columns([1, 1])
+
+    with col1:
+        st.markdown("### Upload Your Book")
+        st.markdown("**Supported books:**")
+        st.markdown("- Rich Dad Poor Dad — Robert Kiyosaki")
+        st.markdown("- The Intelligent Investor — Benjamin Graham")
+        st.markdown("- Let's Talk Money — Monika Halan")
+        st.markdown("- Psychology of Money — Morgan Housel")
+        st.markdown("- Or any other financial book PDF!")
+
+        uploaded_pdf = st.file_uploader(
+            "Upload Financial Book PDF",
+            type=['pdf'],
+            label_visibility="collapsed"
+        )
+
+        if uploaded_pdf:
+            with st.spinner("Reading book..."):
+                pdf_text, total_pages = extract_text_from_pdf(uploaded_pdf)
+
+            if pdf_text:
+                st.success(f"Book uploaded! {total_pages} pages read successfully.")
+                with st.expander("Preview extracted text"):
+                    st.text(pdf_text[:500] + "...")
+            else:
+                st.error("Could not extract text. Try another PDF.")
+
+    with col2:
+        st.markdown("### Book-Based Advice")
+        if uploaded_pdf and pdf_text:
+            now = datetime.now()
+            income = st.session_state.get('monthly_income', 0)
+            cat_totals = get_category_totals(now.year, now.month)
+
+            if income <= 0:
+                st.warning("Please set your monthly income in the sidebar first!")
+            else:
+                if st.button("Generate Book-Based Advice", use_container_width=True):
+                    with st.spinner("Applying book wisdom to your finances..."):
+                        advice = generate_book_based_advice(
+                            pdf_text,
+                            uploaded_pdf.name,
+                            cat_totals,
+                            income
+                        )
+                    st.markdown(advice)
+        else:
+            st.info("Upload a financial book PDF on the left to get started!")
+
+    st.markdown('<div class="section-header" style="margin-top:2rem">FEATURED FINANCIAL BOOKS</div>', unsafe_allow_html=True)
+    books = [
+        ("Rich Dad Poor Dad", "Robert Kiyosaki", "Assets vs Liabilities"),
+        ("The Intelligent Investor", "Benjamin Graham", "Value Investing"),
+        ("Let's Talk Money", "Monika Halan", "Indian Personal Finance"),
+        ("Psychology of Money", "Morgan Housel", "Behavioral Finance"),
+        ("The Millionaire Next Door", "Thomas Stanley", "Wealth Building"),
+    ]
+    cols = st.columns(3)
+    for i, (title, author, theme) in enumerate(books):
+        with cols[i % 3]:
+            st.markdown(f"""
+            <div class="advice-card" style="padding:1rem; margin-bottom:0.5rem">
+                <div style="color:#c4a050; font-weight:bold; font-size:0.9rem">{title}</div>
+                <div style="font-size:0.8rem; color:rgba(232,224,208,0.7)">by {author}</div>
+                <div style="font-size:0.75rem; color:rgba(232,224,208,0.5); margin-top:0.3rem">{theme}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+
+# ═══ SPLITWISE PAGE ════════════════════════════════════════════
+elif page == "📰 Financial News":
+    st.markdown('<div class="section-header">INDIAN FINANCIAL NEWS & TIPS</div>', unsafe_allow_html=True)
+    st.markdown("Live financial news and tips scraped from trusted Indian finance sources.")
+
+    import requests
+    from bs4 import BeautifulSoup
+
+    news_sources = {
+        "Moneycontrol": "https://www.moneycontrol.com/news/business/personal-finance/",
+        "Economic Times": "https://economictimes.indiatimes.com/wealth",
+        "Livemint": "https://www.livemint.com/money",
+    }
+
+    selected_source = st.selectbox("Select News Source", list(news_sources.keys()))
+
+    if st.button("📰 Fetch Latest News", use_container_width=True):
+        with st.spinner(f"Fetching news from {selected_source}..."):
+            try:
+                url = news_sources[selected_source]
+                headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+                response = requests.get(url, headers=headers, timeout=10)
+
+                if response.status_code == 200:
+                    soup = BeautifulSoup(response.content, 'html.parser')
+
+                    articles = []
+                    # Try multiple common selectors
+                    for selector in ['h2 a', 'h3 a', '.news-title a', '.article-title a', 'article h2 a']:
+                        found = soup.select(selector)
+                        if found:
+                            for item in found[:10]:
+                                title = item.get_text(strip=True)
+                                link = item.get('href', '')
+                                if title and len(title) > 20:
+                                    if not link.startswith('http'):
+                                        base = url.split('/')[0] + '//' + url.split('/')[2]
+                                        link = base + link
+                                    articles.append({'title': title, 'link': link})
+                            if articles:
+                                break
+
+                    if articles:
+                        st.success(f"✅ Found {len(articles)} articles from {selected_source}")
+                        for i, article in enumerate(articles[:8], 1):
+                            st.markdown(f"""
+                            <div class="advice-card" style="margin-bottom:0.5rem;padding:0.8rem">
+                                <div style="color:#c4a050;font-weight:bold">{i}. {article['title']}</div>
+                                <div style="font-size:0.75rem;margin-top:0.3rem">
+                                    <a href="{article['link']}" target="_blank" style="color:#4ade80">Read more →</a>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    else:
+                        st.warning("Could not extract articles. The site may have changed its structure.")
+
+                else:
+                    st.error(f"Could not fetch news. Status code: {response.status_code}")
+
+            except requests.exceptions.Timeout:
+                st.error("Request timed out. Please try again.")
+            except requests.exceptions.ConnectionError:
+                st.error("Could not connect. Please check your internet connection.")
+            except Exception as e:
+                st.error(f"Error fetching news: {str(e)}")
+
+    # Static Indian Finance Tips (always shown)
+    st.markdown("---")
+    st.markdown("### 💡 Daily Indian Finance Tips")
+
+    tips = [
+        ("📈 SIP Power", "Investing ₹5,000/month in a Nifty 50 index fund for 20 years at 12% returns gives you ₹49.9 lakhs!"),
+        ("🏛️ PPF Reminder", "PPF interest rate is 7.1% tax-free. The last date to invest for this financial year is 31st March."),
+        ("💳 80C Limit", "You can save up to ₹46,800 in taxes by maxing out your ₹1.5L Section 80C limit through ELSS or PPF."),
+        ("🏥 Health Insurance", "Medical inflation in India is 14% annually. A ₹5L health cover today may only cover ₹1.3L worth of treatment in 10 years."),
+        ("📊 Emergency Fund", "Keep 6 months of expenses in a liquid mutual fund — it earns ~7% while remaining accessible within 1 business day."),
+        ("🥇 Gold Bonds", "Sovereign Gold Bonds give 2.5% annual interest PLUS gold price appreciation AND are tax-free on maturity!"),
+        ("💰 NPS Bonus", "NPS gives an EXTRA ₹50,000 deduction under 80CCD(1B) — completely separate from the ₹1.5L 80C limit."),
+        ("📱 UPI Cashback", "Use CRED for bill payments and HDFC/ICICI credit cards on GPay for cashback of 1-5% on transactions."),
+    ]
+
+    col_t1, col_t2 = st.columns(2)
+    for i, (title, tip) in enumerate(tips):
+        with col_t1 if i % 2 == 0 else col_t2:
+            st.markdown(f"""
+            <div class="advice-card" style="margin-bottom:0.8rem;padding:0.8rem">
+                <div style="color:#c4a050;font-weight:bold;margin-bottom:0.3rem">{title}</div>
+                <div style="font-size:0.85rem;color:rgba(232,224,208,0.8)">{tip}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+elif page == "🤝 Splitwise":
+    st.markdown('<div class="section-header">SPLITWISE GROUP EXPENSES</div>', unsafe_allow_html=True)
+    st.markdown('<div class="alert-info">Import your group expenses from Splitwise and analyze your shared spending!</div>', unsafe_allow_html=True)
+
+    # Get Splitwise API key
+    splitwise_key = ""
+    try:
+        splitwise_key = st.secrets["SPLITWISE_API_KEY"]
+    except:
+        pass
+    
+    if not splitwise_key:
+        splitwise_key = st.text_input(
+            "Enter Splitwise API Key",
+            type="password",
+            placeholder="Paste your Splitwise API key here...",
+            help="Get your key from splitwise.com/apps"
+        )
+
+    if splitwise_key:
+        # Get user info
+        user, error = get_splitwise_user(splitwise_key)
+        
+        if error:
+            st.error(f"Connection failed: {error}")
+        else:
+            st.success(f"Connected as: {user.get('first_name', '')} {user.get('last_name', '')} ({user.get('email', '')})")
+            
+            col1, col2 = st.columns([1, 1])
+            
+            with col1:
+                st.markdown("### Import Settings")
+                days = st.slider("Import expenses from last N days", 7, 90, 30)
+                
+                if st.button("Import Splitwise Expenses", use_container_width=True):
+                    with st.spinner("Fetching expenses from Splitwise..."):
+                        expenses, err = get_splitwise_expenses(splitwise_key, days)
+                        
+                    if err:
+                        st.error(f"Error: {err}")
+                    elif not expenses:
+                        st.info("No expenses found in Splitwise for this period.")
+                    else:
+                        # Parse expenses
+                        parsed = parse_splitwise_expenses(expenses, user.get('id'))
+                        
+                        if parsed:
+                            # Save to database
+                            saved_count = 0
+                            for exp in parsed:
+                                try:
+                                    add_expense(exp['date'], exp['amount'], 
+                                              exp['category'], exp['description'],
+                                              source='splitwise')
+                                    saved_count += 1
+                                except:
+                                    pass
+                            
+                            st.success(f"✅ Imported {saved_count} expenses from Splitwise!")
+                            st.session_state['splitwise_expenses'] = parsed
+                        else:
+                            st.info("No expenses where you owe money found.")
+
+                # Show groups
+                st.markdown("### Your Groups")
+                groups, gerr = get_splitwise_groups(splitwise_key)
+                if groups:
+                    for group in groups[:5]:
+                        if group.get('name') != 'Non-group expenses':
+                            members = len(group.get('members', []))
+                            st.markdown(f"""
+                            <div class="advice-card" style="padding:0.8rem; margin-bottom:0.5rem">
+                                <div style="color:#c4a050; font-weight:bold">{group.get('name', 'Group')}</div>
+                                <div style="font-size:0.8rem; color:rgba(232,224,208,0.6)">{members} members</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                else:
+                    st.info("No groups found. Add friends on Splitwise to split expenses!")
+
+            with col2:
+                st.markdown("### Spending Analysis")
+                
+                if 'splitwise_expenses' in st.session_state:
+                    parsed = st.session_state['splitwise_expenses']
+                    analysis = analyze_splitwise_spending(parsed)
+                    
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div style="font-size:0.8rem; color:rgba(232,224,208,0.5)">TOTAL GROUP EXPENSES</div>
+                        <div style="font-family:Cinzel,serif; font-size:1.8rem; color:#c4a050">₹{analysis['total']:,.2f}</div>
+                        <div style="font-size:0.8rem; color:rgba(232,224,208,0.5)">{analysis['count']} transactions</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    if analysis['by_category']:
+                        st.markdown("**By Category:**")
+                        for cat, amount in sorted(analysis['by_category'].items(), 
+                                                   key=lambda x: x[1], reverse=True):
+                            st.markdown(f'<div class="alert-info"><b>{cat}:</b> ₹{amount:,.2f}</div>', 
+                                       unsafe_allow_html=True)
+                    
+                    if analysis['largest_expense']:
+                        largest = analysis['largest_expense']
+                        st.markdown(f"""
+                        <div class="advice-card" style="margin-top:1rem">
+                            <div style="color:#c4a050; font-size:0.85rem">LARGEST EXPENSE</div>
+                            <div style="font-weight:bold">{largest['description']}</div>
+                            <div style="color:#c4a050">₹{largest['amount']:,.2f}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.markdown("""
+                    <div class="advice-card" style="text-align:center; padding:2rem">
+                        <div style="font-size:2rem">🤝</div>
+                        <div style="color:#c4a050; margin-top:0.5rem">No data yet!</div>
+                        <div style="font-size:0.85rem; color:rgba(232,224,208,0.6); margin-top:0.5rem">
+                            Import your Splitwise expenses to see analysis
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div class="advice-card" style="text-align:center; padding:2rem">
+            <div style="font-size:2rem">🤝</div>
+            <div style="color:#c4a050; margin-top:0.5rem">Enter your Splitwise API key above!</div>
+            <div style="font-size:0.85rem; color:rgba(232,224,208,0.6); margin-top:0.5rem">
+                Get your API key from splitwise.com/apps
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
