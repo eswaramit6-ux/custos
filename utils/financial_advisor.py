@@ -48,6 +48,31 @@ FINANCIAL_GURUS = {
         "indian_context": "Apply value investing to NSE/BSE stocks. Look for companies with strong fundamentals and low P/E ratios.",
         "icon": "📚"
     }
+,
+    "Raghunath Mashelkar": {
+        "philosophy": "Inclusive innovation, frugal engineering, doing more with less for the masses",
+        "principles": [
+            "Innovation is not just for the rich — it must serve the poorest of the poor.",
+            "Gandhian Engineering: more from less for more.",
+            "The best solutions are simple, affordable, and scalable.",
+            "Education and knowledge are the greatest wealth you can build.",
+            "Think beyond profit — build wealth that uplifts society.",
+        ],
+        "indian_context": "Apply frugal innovation to your finances — find low-cost, high-impact investment options like PPF, ELSS and index funds instead of expensive ULIPs.",
+        "icon": "🔬"
+    },
+    "Suze Orman (India Adapted)": {
+        "philosophy": "Financial security through discipline, emergency planning, and debt elimination",
+        "principles": [
+            "People first, then money, then things.",
+            "A financial plan is only as strong as its weakest link — usually debt.",
+            "The best investment you can make is in yourself.",
+            "You must never, ever give up on yourself and your financial future.",
+            "An emergency fund is not optional — it is the foundation of financial security.",
+        ],
+        "indian_context": "Build 6 months emergency fund in a liquid fund first. Clear all high-interest debt (credit cards, personal loans) before investing. Then build SIP in index funds.",
+        "icon": "💪"
+    }
 }
 
 INDIAN_FINANCIAL_ADVICE = {
@@ -86,6 +111,22 @@ SPENDING_INSIGHTS = {
 }
 
 GURU_ADVICE_TEMPLATES = {
+    "Raghunath Mashelkar": {
+        "high_food": "Apply Gandhian Engineering to food spending — cook simple, nutritious meals at home. More nutrition from less money. Redirect savings to PPF or index funds.",
+        "high_shopping": "Before buying anything, ask — is this a need or a want? Frugal innovation means finding the most value at the lowest cost. Buy less, invest more.",
+        "high_entertainment": "Entertainment spending reflects a consumption mindset. Shift to a creation mindset — invest that money in education or skill-building that generates future income.",
+        "good_savings": "Excellent! Now deploy those savings in inclusive, low-cost instruments — Nifty 50 index funds, PPF, or NPS. Simple, affordable, scalable wealth creation.",
+        "low_savings": "Innovation begins with constraint. Your low savings rate is a constraint — use it as motivation to find creative ways to cut costs and increase income.",
+        "investment_tip": "Invest in the simplest, most affordable instruments — a ₹500/month SIP in a Nifty 50 index fund. Gandhian Engineering of investing — maximum returns from minimum cost.",
+    },
+    "Suze Orman (India Adapted)": {
+        "high_food": "People first, then money, then things — but food overspending hurts your future self. Cut dining out by 50% and put that money into your emergency fund first.",
+        "high_shopping": "Stop spending money you don't have on things you don't need to impress people you don't like. Every shopping rupee delayed is a savings rupee earned.",
+        "high_entertainment": "Entertainment is a luxury — financial security is a necessity. Build your 6-month emergency fund first. Then enjoy entertainment guilt-free.",
+        "good_savings": "You are doing the right thing! Now make sure you have 6 months of expenses in a liquid fund before investing in equities. Security before growth.",
+        "low_savings": "You must take action NOW. Open a liquid fund account today and set up an auto-transfer of even ₹1,000/month. The best time to start was yesterday.",
+        "investment_tip": "Step 1: Emergency fund of 6 months expenses. Step 2: Clear all credit card debt. Step 3: Term insurance. Step 4: Only THEN start SIP. Follow this order — no exceptions.",
+    },
     "Warren Buffett": {
         "high_food": "Your food spending is high. As I always say — 'Do not save what is left after spending, but spend what is left after saving.' Cut dining out and redirect that money into index fund SIPs.",
         "high_shopping": "Excessive shopping is a liability trap. Ask yourself — does this purchase put money IN my pocket or TAKE money out? Stick to needs, invest the rest in quality assets.",
