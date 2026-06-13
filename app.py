@@ -270,17 +270,12 @@ with st.sidebar:
     
     st.divider()
 
-    # API Key
-    st.markdown("#### 🔑 API Configuration")
-    api_key = st.text_input(
-        "Gemini API Key",
-        type="password",
-        placeholder="AIza...",
-        help="Your Gemini API key for AI-powered features"
-    )
-    if api_key:
-        st.session_state['api_key'] = api_key
-        st.success("API Key saved ✓")
+    # API Key loaded silently from secrets
+    try:
+        st.session_state['api_key'] = st.secrets["GEMINI_API_KEY"]
+    except:
+        pass
+    st.success("API Key saved ✓")
 
     st.divider()
 
