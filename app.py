@@ -275,10 +275,6 @@ with st.sidebar:
         st.session_state['api_key'] = st.secrets["GEMINI_API_KEY"]
     except:
         pass
-    st.success("API Key saved ✓")
-
-    st.divider()
-
     # Monthly Income
     st.markdown("#### 💰 Monthly Income")
     monthly_income = st.number_input(
