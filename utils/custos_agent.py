@@ -2,34 +2,25 @@ from langchain_groq import ChatGroq
 from langchain_core.tools import tool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
-from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain.agents import AgentExecutor, create_tool_calling_agent
-import tempfile
-import os
+from langchain_core.agents import AgentExecutor
+from langchain_core.agents import create_tool_calling_agent
 
 FINANCIAL_KNOWLEDGE = """
 INDIAN FINANCIAL PLANNING GUIDE
 EMERGENCY FUND: 6 months expenses in liquid fund.
 INSURANCE: Term 10-15x income. Health min 5 lakhs.
-TAX 80C (1.5L): ELSS, PPF, EPF. 80D: Health 25000. NPS 80CCD: 50000.
-INVEST: SIP Nifty50, PPF, ELSS, FD, Stocks Zerodha/Groww.
+TAX 80C 1.5L: ELSS PPF EPF. 80D Health 25000. NPS 80CCD 50000.
+INVEST: SIP Nifty50 PPF ELSS FD Stocks Zerodha Groww.
 BUDGET: 50-30-20 rule.
-GURUS: Buffett=value, Kiyosaki=assets, Sethi=automate, Graham=safety margin.
+GURUS: Buffett=value Kiyosaki=assets Sethi=automate Graham=safety.
 """
 
-# Simple in-memory RAG using keyword search
 class SimpleRAG:
     def __init__(self, text):
-        self.chunks = [text[i:i+200] for i in range(0, len(text), 150)]
-    
+        self.chunks = [text[i:i+300] for i in range(0, len(text), 200)]
     def search(self, query, k=3):
-        query_words = query.lower().split()
-        scored = []
-        for chunk in self.chunks:
-            score = sum(1 for w in query_words if w in chunk.lower())
-            scored.append((score, chunk))
+        words = query.lower().split()
+        scored = [(sum(1 for w in words if w in c.lower()), c) for c in self.chunks]
         scored.sort(reverse=True)
         return [c for _, c in scored[:k]]
 
@@ -40,17 +31,14 @@ def get_llm(groq_api_key):
 
 def create_knowledge_base(pdf_text=None):
     global rag
-    text = FINANCIAL_KNOWLEDGE + ("\n" + pdf_text if pdf_text else "")
-    rag = SimpleRAG(text)
+    rag = SimpleRAG(FINANCIAL_KNOWLEDGE + ("\n" + pdf_text if pdf_text else ""))
     return rag
 
 def create_custos_tools(db_functions, retriever=None):
-
     @tool
     def search_financial_knowledge(query: str) -> str:
-        """Search Indian financial advice, tax tips, investment options and guru wisdom"""
-        results = rag.search(query)
-        return "\n".join(results)
+        """Search Indian financial advice tax tips investment options and guru wisdom"""
+        return "\n".join(rag.search(query))
 
     @tool
     def get_expense_summary(period: str = "current month") -> str:
@@ -66,14 +54,13 @@ def create_custos_tools(db_functions, retriever=None):
             for _, row in cat_totals.iterrows():
                 result += f"- {row['category']}: Rs.{row['total']:,.0f}\n"
                 total += row['total']
-            result += f"Total: Rs.{total:,.0f}"
-            return result
+            return result + f"Total: Rs.{total:,.0f}"
         except Exception as e:
             return f"Error: {str(e)}"
 
     @tool
     def analyze_budget_health(monthly_income: float = 50000) -> str:
-        """Analyze financial health score and budget alerts"""
+        """Analyze financial health score and budget alerts based on spending"""
         try:
             from datetime import datetime
             from utils.financial_advisor import calculate_financial_health_score, analyze_spending_health
@@ -92,27 +79,22 @@ def create_custos_tools(db_functions, retriever=None):
 
     @tool
     def get_tax_saving_advice(annual_income: float = 600000) -> str:
-        """Get personalized Indian tax saving recommendations"""
+        """Get personalized Indian tax saving recommendations based on annual income"""
         return f"""Tax Saving Rs.{annual_income:,.0f}/year:
-1. 80C Rs.1.5L: ELSS SIP Rs.12,500/month or PPF (saves Rs.46,800 tax)
-2. 80D Rs.25,000: Health insurance (saves Rs.7,800)
-3. NPS 80CCD Rs.50,000: Extra deduction (saves Rs.15,600)
-4. HRA: Claim if renting
+1. 80C Rs.1.5L: ELSS SIP Rs.12500/month or PPF (saves Rs.46800 tax)
+2. 80D Rs.25000: Health insurance (saves Rs.7800)
+3. NPS 80CCD Rs.50000 extra (saves Rs.15600)
 Max saving: Rs.{min(int(annual_income*0.3),70200):,}"""
 
     @tool
     def get_investment_recommendation(risk_profile: str = "moderate", monthly_amount: float = 5000) -> str:
         """Get Indian investment plan based on risk profile and monthly investment amount"""
         a = monthly_amount
-        plans = {
-            "conservative": f"Conservative Rs.{a:,.0f}/mo: PPF 40% + FD 30% + Debt 20% + Gold 10%",
-            "moderate": f"Moderate Rs.{a:,.0f}/mo: Nifty50 40% + ELSS 25% + PPF 20% + Gold 15%",
-            "aggressive": f"Aggressive Rs.{a:,.0f}/mo: MidCap 50% + Nifty50 25% + ELSS 15% + Intl 10%"
-        }
-        for k, v in plans.items():
-            if k in risk_profile.lower():
-                return v
-        return plans["moderate"]
+        if "conservative" in risk_profile.lower():
+            return f"Conservative Rs.{a:,.0f}/mo: PPF 40% + FD 30% + Debt 20% + Gold 10%"
+        elif "aggressive" in risk_profile.lower():
+            return f"Aggressive Rs.{a:,.0f}/mo: MidCap 50% + Nifty50 25% + ELSS 15% + Intl 10%"
+        return f"Moderate Rs.{a:,.0f}/mo: Nifty50 40% + ELSS 25% + PPF 20% + Gold 15%"
 
     return [search_financial_knowledge, get_expense_summary, analyze_budget_health,
             get_tax_saving_advice, get_investment_recommendation]
@@ -123,7 +105,7 @@ def create_custos_agent(groq_api_key, db_functions, retriever=None):
     prompt = ChatPromptTemplate.from_messages([
         ("system", """You are CUSTOS, AI financial guardian for Indian users.
 Wisdom of Buffett + Kiyosaki + Sethi + Graham.
-Always use Rs. Give India-specific advice (SIP/PPF/ELSS/NPS).
+Always use Rs. Give India-specific advice SIP PPF ELSS NPS.
 Use tools to get real data. Be direct and actionable."""),
         MessagesPlaceholder(variable_name="chat_history"),
         ("human", "{input}"),
@@ -137,9 +119,7 @@ def load_pdf_to_retriever(pdf_file):
     try:
         import PyPDF2
         reader = PyPDF2.PdfReader(pdf_file)
-        text = ""
-        for page in reader.pages[:50]:
-            text += page.extract_text() + "\n"
+        text = "".join([p.extract_text() for p in reader.pages[:50]])
         global rag
         rag = SimpleRAG(FINANCIAL_KNOWLEDGE + "\n" + text)
         return rag, len(reader.pages)
