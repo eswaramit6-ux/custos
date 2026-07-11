@@ -5,87 +5,68 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain.tools.retriever import create_retriever_tool
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 import tempfile
 import os
 
 FINANCIAL_KNOWLEDGE = """
 INDIAN FINANCIAL PLANNING GUIDE
-
-EMERGENCY FUND: Keep 6 months expenses in liquid fund or savings account.
-
-INSURANCE FIRST:
-- Term Insurance: 10-15x annual income
-- Health Insurance: minimum 5 lakhs coverage
-
-TAX SAVING (Section 80C - 1.5L limit):
-- ELSS Mutual Funds: 3 year lock-in, market returns
-- PPF: 7.1% interest, 15 year lock-in, tax free
-- EPF: Employer contribution, retirement focused
-
-ADDITIONAL TAX SAVING:
-- Section 80D: Health insurance premium up to 25000
-- NPS: Additional 50000 under 80CCD(1B)
-- HRA: House rent allowance if in rented accommodation
-
-INVESTMENT OPTIONS:
-- SIP: Start with 500/month in Nifty 50 index fund
-- PPF: Safe, tax free, long term
-- ELSS: Tax saving + market returns
-- FD: Safe, 6-7% returns
-- Stocks: Higher risk via Zerodha/Groww
-
-BUDGETING RULES:
-- 50-30-20: 50% needs, 30% wants, 20% savings
-- Emergency fund before any investment
-
-FINANCIAL GURUS:
-Warren Buffett: Buy quality assets, hold long term, live below means
-Robert Kiyosaki: Build assets, avoid liabilities, passive income
-Ramit Sethi: Automate finances, spend on what you love
-Benjamin Graham: Margin of safety, value investing
+EMERGENCY FUND: 6 months expenses in liquid fund.
+INSURANCE: Term 10-15x income. Health min 5 lakhs.
+TAX 80C (1.5L): ELSS, PPF, EPF. 80D: Health 25000. NPS 80CCD: 50000.
+INVEST: SIP Nifty50, PPF, ELSS, FD, Stocks Zerodha/Groww.
+BUDGET: 50-30-20 rule.
+GURUS: Buffett=value, Kiyosaki=assets, Sethi=automate, Graham=safety margin.
 """
 
+# Simple in-memory RAG using keyword search
+class SimpleRAG:
+    def __init__(self, text):
+        self.chunks = [text[i:i+200] for i in range(0, len(text), 150)]
+    
+    def search(self, query, k=3):
+        query_words = query.lower().split()
+        scored = []
+        for chunk in self.chunks:
+            score = sum(1 for w in query_words if w in chunk.lower())
+            scored.append((score, chunk))
+        scored.sort(reverse=True)
+        return [c for _, c in scored[:k]]
+
+rag = SimpleRAG(FINANCIAL_KNOWLEDGE)
+
 def get_llm(groq_api_key):
-    return ChatGroq(
-        groq_api_key=groq_api_key,
-        model_name="llama3-8b-8192",
-        temperature=0.3
-    )
+    return ChatGroq(groq_api_key=groq_api_key, model_name="llama3-8b-8192", temperature=0.3)
 
 def create_knowledge_base(pdf_text=None):
-    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
-    texts = [FINANCIAL_KNOWLEDGE]
-    if pdf_text:
-        texts.append(pdf_text)
-    docs = splitter.create_documents(texts)
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    vectorstore = Chroma.from_documents(docs, embeddings)
-    return vectorstore.as_retriever(search_kwargs={"k": 3})
+    global rag
+    text = FINANCIAL_KNOWLEDGE + ("\n" + pdf_text if pdf_text else "")
+    rag = SimpleRAG(text)
+    return rag
 
-def create_custos_tools(db_functions, retriever):
-    retriever_tool = create_retriever_tool(
-        retriever,
-        name="financial_knowledge",
-        description="Search Indian financial advice, tax saving tips, investment options and guru wisdom"
-    )
+def create_custos_tools(db_functions, retriever=None):
+
+    @tool
+    def search_financial_knowledge(query: str) -> str:
+        """Search Indian financial advice, tax tips, investment options and guru wisdom"""
+        results = rag.search(query)
+        return "\n".join(results)
 
     @tool
     def get_expense_summary(period: str = "current month") -> str:
-        """Get user expense summary by category"""
+        """Get user expense summary by category for current month"""
         try:
             from datetime import datetime
             now = datetime.now()
             cat_totals = db_functions['get_category_totals'](now.year, now.month)
             if cat_totals.empty:
                 return "No expenses recorded yet."
-            result = f"Expenses for {now.strftime('%B %Y')}:\n"
+            result = f"Expenses {now.strftime('%B %Y')}:\n"
             total = 0
             for _, row in cat_totals.iterrows():
                 result += f"- {row['category']}: Rs.{row['total']:,.0f}\n"
                 total += row['total']
-            result += f"\nTotal: Rs.{total:,.0f}"
+            result += f"Total: Rs.{total:,.0f}"
             return result
         except Exception as e:
             return f"Error: {str(e)}"
@@ -99,14 +80,12 @@ def create_custos_tools(db_functions, retriever):
             now = datetime.now()
             cat_totals = db_functions['get_category_totals'](now.year, now.month)
             if cat_totals.empty:
-                return "No expense data to analyze."
-            score, grade, reasons = calculate_financial_health_score(cat_totals, monthly_income)
-            alerts, suggestions = analyze_spending_health(cat_totals, monthly_income)
-            result = f"Health Score: {score}/100 - {grade}\n"
-            if alerts:
-                result += "Alerts:\n" + "\n".join(alerts[:3])
-            if suggestions:
-                result += "\nTips:\n" + "\n".join(suggestions[:3])
+                return "No data yet."
+            score, grade, _ = calculate_financial_health_score(cat_totals, monthly_income)
+            alerts, tips = analyze_spending_health(cat_totals, monthly_income)
+            result = f"Score: {score}/100 - {grade}\n"
+            if alerts: result += "\n".join(alerts[:2])
+            if tips: result += "\n" + "\n".join(tips[:2])
             return result
         except Exception as e:
             return f"Error: {str(e)}"
@@ -114,75 +93,55 @@ def create_custos_tools(db_functions, retriever):
     @tool
     def get_tax_saving_advice(annual_income: float = 600000) -> str:
         """Get personalized Indian tax saving recommendations"""
-        return f"""Tax Saving for Rs.{annual_income:,.0f} annual income:
-1. Section 80C (Save Rs.46,800): ELSS SIP Rs.12,500/month or PPF
-2. Section 80D (Save Rs.7,800): Health insurance Rs.25,000 premium
-3. NPS 80CCD(1B) (Save Rs.15,600): Extra Rs.50,000 investment
-4. HRA: Claim if in rented accommodation
-Total potential saving: Rs.{min(int(annual_income*0.3), 70200):,}"""
+        return f"""Tax Saving Rs.{annual_income:,.0f}/year:
+1. 80C Rs.1.5L: ELSS SIP Rs.12,500/month or PPF (saves Rs.46,800 tax)
+2. 80D Rs.25,000: Health insurance (saves Rs.7,800)
+3. NPS 80CCD Rs.50,000: Extra deduction (saves Rs.15,600)
+4. HRA: Claim if renting
+Max saving: Rs.{min(int(annual_income*0.3),70200):,}"""
 
     @tool
     def get_investment_recommendation(risk_profile: str = "moderate", monthly_amount: float = 5000) -> str:
-        """Get Indian investment recommendations based on risk profile and monthly amount"""
-        if "conservative" in risk_profile.lower():
-            return f"""Conservative Plan Rs.{monthly_amount:,.0f}/month:
-- 40% PPF: Rs.{monthly_amount*0.4:,.0f}
-- 30% FD: Rs.{monthly_amount*0.3:,.0f}
-- 20% Debt Fund: Rs.{monthly_amount*0.2:,.0f}
-- 10% Gold/SGB: Rs.{monthly_amount*0.1:,.0f}"""
-        elif "aggressive" in risk_profile.lower():
-            return f"""Aggressive Plan Rs.{monthly_amount:,.0f}/month:
-- 50% Mid/Small Cap: Rs.{monthly_amount*0.5:,.0f}
-- 25% Nifty 50: Rs.{monthly_amount*0.25:,.0f}
-- 15% ELSS: Rs.{monthly_amount*0.15:,.0f}
-- 10% International: Rs.{monthly_amount*0.1:,.0f}"""
-        else:
-            return f"""Moderate Plan Rs.{monthly_amount:,.0f}/month:
-- 40% Nifty 50 SIP: Rs.{monthly_amount*0.4:,.0f}
-- 25% ELSS: Rs.{monthly_amount*0.25:,.0f}
-- 20% PPF: Rs.{monthly_amount*0.2:,.0f}
-- 15% Gold/SGB: Rs.{monthly_amount*0.15:,.0f}"""
+        """Get Indian investment plan based on risk profile and monthly investment amount"""
+        a = monthly_amount
+        plans = {
+            "conservative": f"Conservative Rs.{a:,.0f}/mo: PPF 40% + FD 30% + Debt 20% + Gold 10%",
+            "moderate": f"Moderate Rs.{a:,.0f}/mo: Nifty50 40% + ELSS 25% + PPF 20% + Gold 15%",
+            "aggressive": f"Aggressive Rs.{a:,.0f}/mo: MidCap 50% + Nifty50 25% + ELSS 15% + Intl 10%"
+        }
+        for k, v in plans.items():
+            if k in risk_profile.lower():
+                return v
+        return plans["moderate"]
 
-    return [retriever_tool, get_expense_summary, analyze_budget_health,
+    return [search_financial_knowledge, get_expense_summary, analyze_budget_health,
             get_tax_saving_advice, get_investment_recommendation]
 
-def create_custos_agent(groq_api_key, db_functions, retriever):
+def create_custos_agent(groq_api_key, db_functions, retriever=None):
     llm = get_llm(groq_api_key)
     tools = create_custos_tools(db_functions, retriever)
-
     prompt = ChatPromptTemplate.from_messages([
-        ("system", """You are CUSTOS, an AI-powered personal financial guardian for Indian users.
-You combine wisdom of Warren Buffett, Robert Kiyosaki, Ramit Sethi and Benjamin Graham.
-Always give advice in Indian Rupees. Reference Indian products (SIP, PPF, ELSS, NPS).
-Be direct, actionable and specific. Use tools to get real user data before advising."""),
+        ("system", """You are CUSTOS, AI financial guardian for Indian users.
+Wisdom of Buffett + Kiyosaki + Sethi + Graham.
+Always use Rs. Give India-specific advice (SIP/PPF/ELSS/NPS).
+Use tools to get real data. Be direct and actionable."""),
         MessagesPlaceholder(variable_name="chat_history"),
         ("human", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
-
     agent = create_tool_calling_agent(llm, tools, prompt)
-
-    return AgentExecutor(
-        agent=agent,
-        tools=tools,
-        verbose=True,
-        handle_parsing_errors=True,
-        max_iterations=5
-    )
+    return AgentExecutor(agent=agent, tools=tools, verbose=True,
+                        handle_parsing_errors=True, max_iterations=5)
 
 def load_pdf_to_retriever(pdf_file):
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
-            tmp.write(pdf_file.read())
-            tmp_path = tmp.name
-        from langchain_community.document_loaders import PyPDFLoader
-        loader = PyPDFLoader(tmp_path)
-        pages = loader.load()
-        splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
-        docs = splitter.split_documents(pages)
-        embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-        vectorstore = Chroma.from_documents(docs, embeddings)
-        os.unlink(tmp_path)
-        return vectorstore.as_retriever(search_kwargs={"k": 3}), len(pages)
+        import PyPDF2
+        reader = PyPDF2.PdfReader(pdf_file)
+        text = ""
+        for page in reader.pages[:50]:
+            text += page.extract_text() + "\n"
+        global rag
+        rag = SimpleRAG(FINANCIAL_KNOWLEDGE + "\n" + text)
+        return rag, len(reader.pages)
     except Exception as e:
         return None, 0
