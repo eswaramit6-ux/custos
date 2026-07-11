@@ -11,5 +11,8 @@ requests
 numpy
 opencv-python-headless
 pytesseract
-python-docx
-beautifulsoup4
+langchain
+langchain-groq
+langchain-community
+chromadb
+sentence-transformers
