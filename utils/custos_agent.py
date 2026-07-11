@@ -1,7 +1,7 @@
 from langchain_groq import ChatGroq
 from langchain_core.tools import tool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.memory import ConversationBufferMemory
+from langchain_core.messages import HumanMessage, AIMessage
 from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -34,18 +34,17 @@ INVESTMENT OPTIONS:
 - PPF: Safe, tax free, long term
 - ELSS: Tax saving + market returns
 - FD: Safe, 6-7% returns
-- Stocks: Higher risk, higher returns via Zerodha/Groww
+- Stocks: Higher risk via Zerodha/Groww
 
 BUDGETING RULES:
 - 50-30-20: 50% needs, 30% wants, 20% savings
 - Emergency fund before any investment
-- Insurance before investment
 
 FINANCIAL GURUS:
 Warren Buffett: Buy quality assets, hold long term, live below means
-Robert Kiyosaki: Build assets, avoid liabilities, create passive income
-Ramit Sethi: Automate finances, spend on what you love, cut rest
-Benjamin Graham: Margin of safety, value investing, patience
+Robert Kiyosaki: Build assets, avoid liabilities, passive income
+Ramit Sethi: Automate finances, spend on what you love
+Benjamin Graham: Margin of safety, value investing
 """
 
 def get_llm(groq_api_key):
@@ -56,11 +55,11 @@ def get_llm(groq_api_key):
     )
 
 def create_knowledge_base(pdf_text=None):
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
     texts = [FINANCIAL_KNOWLEDGE]
     if pdf_text:
         texts.append(pdf_text)
-    docs = text_splitter.create_documents(texts)
+    docs = splitter.create_documents(texts)
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     vectorstore = Chroma.from_documents(docs, embeddings)
     return vectorstore.as_retriever(search_kwargs={"k": 3})
@@ -116,7 +115,7 @@ def create_custos_tools(db_functions, retriever):
     def get_tax_saving_advice(annual_income: float = 600000) -> str:
         """Get personalized Indian tax saving recommendations"""
         return f"""Tax Saving for Rs.{annual_income:,.0f} annual income:
-1. Section 80C (Save Rs.46,800 tax): ELSS SIP Rs.12,500/month or PPF
+1. Section 80C (Save Rs.46,800): ELSS SIP Rs.12,500/month or PPF
 2. Section 80D (Save Rs.7,800): Health insurance Rs.25,000 premium
 3. NPS 80CCD(1B) (Save Rs.15,600): Extra Rs.50,000 investment
 4. HRA: Claim if in rented accommodation
@@ -124,7 +123,7 @@ Total potential saving: Rs.{min(int(annual_income*0.3), 70200):,}"""
 
     @tool
     def get_investment_recommendation(risk_profile: str = "moderate", monthly_amount: float = 5000) -> str:
-        """Get Indian investment recommendations based on risk profile"""
+        """Get Indian investment recommendations based on risk profile and monthly amount"""
         if "conservative" in risk_profile.lower():
             return f"""Conservative Plan Rs.{monthly_amount:,.0f}/month:
 - 40% PPF: Rs.{monthly_amount*0.4:,.0f}
@@ -163,12 +162,9 @@ Be direct, actionable and specific. Use tools to get real user data before advis
 
     agent = create_tool_calling_agent(llm, tools, prompt)
 
-    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-
     return AgentExecutor(
         agent=agent,
         tools=tools,
-        memory=memory,
         verbose=True,
         handle_parsing_errors=True,
         max_iterations=5
