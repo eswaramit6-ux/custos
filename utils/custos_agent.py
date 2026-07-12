@@ -181,7 +181,7 @@ Use tools to get real user data. Be direct and actionable."""}
         
         # First call with tools
         response = client.chat.completions.create(
-            model="llama3-8b-8192",
+            model="llama-3.3-70b-versatile",
             messages=messages,
             tools=TOOLS,
             tool_choice="auto",
@@ -208,7 +208,7 @@ Use tools to get real user data. Be direct and actionable."""}
             
             # Second call with tool results
             final = client.chat.completions.create(
-                model="llama3-8b-8192",
+                model="llama-3.3-70b-versatile",
                 messages=messages,
                 max_tokens=1024
             )

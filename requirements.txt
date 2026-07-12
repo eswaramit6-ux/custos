@@ -11,8 +11,9 @@ requests
 numpy
 opencv-python-headless
 pytesseract
-langchain
+groq
 langchain-groq
-langchain-community
 langchain-core
 langchain-text-splitters
+langchain-community
+langchain
