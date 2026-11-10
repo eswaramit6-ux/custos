@@ -17,3 +17,6 @@ langchain-core
 langchain-text-splitters
 langchain-community
 langchain
+beautifulsoup4
+lxml
+requests
